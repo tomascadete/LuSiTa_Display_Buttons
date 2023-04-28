@@ -90,10 +90,10 @@ void loop()
   prevS2 = S2;
   prevS3 = S3;
   prevS4 = S4;
-  S1 = !digitalRead(PIN_S1);
-  S2 = !digitalRead(PIN_S2);
-  S3 = !digitalRead(PIN_S3);
-  S4 = !digitalRead(PIN_S4);
+  S1 = digitalRead(PIN_S1);
+  S2 = digitalRead(PIN_S2);
+  S3 = digitalRead(PIN_S3);
+  S4 = digitalRead(PIN_S4);
 
   // FSM processing
   // Update tis for all state machines
