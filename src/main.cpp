@@ -10,7 +10,7 @@
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+// Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define PIN_S1 12
 #define PIN_S2 13
@@ -52,24 +52,24 @@ void setup()
   // put your setup code here, to run once:
   // Initialize serial and wait for port to open:
   Serial.begin(9600);
-  pinMode(PIN_S1, INPUT);
-  pinMode(PIN_S2, INPUT);
-  pinMode(PIN_S3, INPUT);
-  pinMode(PIN_S4, INPUT);
+  pinMode(PIN_S1, INPUT_PULLUP);
+  pinMode(PIN_S2, INPUT_PULLUP);
+  pinMode(PIN_S3, INPUT_PULLUP);
+  pinMode(PIN_S4, INPUT_PULLUP);
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
-  { 
-    Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
-  }
+  // if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+  // { 
+  //   Serial.println(F("SSD1306 allocation failed"));
+  //   for(;;); // Don't proceed, loop forever
+  // }
   
   // Show initial display buffer contents on the screen --
   // the library initializes this with an Adafruit splash screen.
-  display.display();
+  // display.display();
 
   // Clear the buffer
-  //display.clearDisplay();
+  // display.clearDisplay();
 }
 
 void loop()
@@ -90,10 +90,10 @@ void loop()
   prevS2 = S2;
   prevS3 = S3;
   prevS4 = S4;
-  S1 = digitalRead(PIN_S1);
-  S2 = digitalRead(PIN_S2);
-  S3 = digitalRead(PIN_S3);
-  S4 = digitalRead(PIN_S4);
+  S1 = !digitalRead(PIN_S1);
+  S2 = !digitalRead(PIN_S2);
+  S3 = !digitalRead(PIN_S3);
+  S4 = !digitalRead(PIN_S4);
 
   // FSM processing
   // Update tis for all state machines
