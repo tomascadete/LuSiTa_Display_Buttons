@@ -10,7 +10,7 @@
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-// Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define PIN_S1 12
 #define PIN_S2 13
@@ -32,7 +32,10 @@ uint8_t S3, prevS3;
 uint8_t S4, prevS4;
 
 // Our finite state machine
-fsm_t fsm1;
+fsm_t on_off, menus, price;
+
+int aux = 1;
+float price_current = 0.0, price_nextday = 0.0, price_nextweek = 0.0;
 
 unsigned long interval, last_cycle;
 unsigned long loop_micros;
@@ -44,6 +47,7 @@ void set_state(fsm_t& fsm, int new_state)
     fsm.state = new_state;
     fsm.tes = millis();
     fsm.tis = 0;
+    aux = 1;
   }
 }
 
@@ -58,15 +62,15 @@ void setup()
   pinMode(PIN_S4, INPUT_PULLUP);
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  // if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
-  // { 
-  //   Serial.println(F("SSD1306 allocation failed"));
-  //   for(;;); // Don't proceed, loop forever
-  // }
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+  { 
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
   
   // Show initial display buffer contents on the screen --
   // the library initializes this with an Adafruit splash screen.
-  // display.display();
+  display.display();
 
   // Clear the buffer
   // display.clearDisplay();
@@ -98,106 +102,165 @@ void loop()
   // FSM processing
   // Update tis for all state machines
   unsigned long cur_time = millis();   // Just one call to millis()
-  fsm1.tis = cur_time - fsm1.tes;
+  on_off.tis = cur_time - on_off.tes;
+  menus.tis = cur_time - menus.tes;
+  price.tis = cur_time - price.tes;
 
-  // Calculate next state for the first state machine
-  if (fsm1.state == 0 && S4 && !prevS4)
+  // Calculate next state for the menus state machine (if not frozen)
+  if (menus.state == 1 && S4 && !prevS4)
   {
-    fsm1.new_state = 1;
+    menus.new_state = 2;
   }
-  else if (fsm1.state == 1 && S4 && !prevS4)
+  else if (menus.state == 1 && S1 && !prevS1)
   {
-    fsm1.new_state = 2;
+    menus.new_state = 6;
   }
-  else if(fsm1.state == 1 && S1 && !prevS1)
+  else if (menus.state == 2 && S4 && !prevS4)
   {
-    fsm1.new_state = 0;
+    menus.new_state = 3;
   }
-  else if (fsm1.state == 2 && S4 && !prevS4)
+  else if(menus.state == 2 && S1 && !prevS1)
   {
-    fsm1.new_state = 3;
+    menus.new_state = 1;
   }
-  else if(fsm1.state == 2 && S1 && !prevS1)
+  else if (menus.state == 3 && S4 && !prevS4)
   {
-    fsm1.new_state = 1;
+    menus.new_state = 4;
   }
-  else if (fsm1.state == 3 && S4 && !prevS4)
+  else if (menus.state == 3 && S1 && !prevS1)
   {
-    fsm1.new_state = 4;
+    menus.new_state = 2;
   }
-  else if(fsm1.state == 3 && S1 && !prevS1)
+  else if (menus.state == 4 && S4 && !prevS4)
   {
-    fsm1.new_state = 2;
+    menus.new_state = 5;
   }
-  else if (fsm1.state == 4 && S4 && !prevS4)
+  else if(menus.state == 4 && S1 && !prevS1)
   {
-    fsm1.new_state = 5;
+    menus.new_state = 3;
   }
-  else if(fsm1.state == 4 && S1 && !prevS1)
+  else if (menus.state == 5 && S4 && !prevS4)
   {
-    fsm1.new_state = 3;
+    menus.new_state = 6;
   }
-  else if (fsm1.state == 5 && S4 && !prevS4)
+  else if(menus.state == 5 && S1 && !prevS1)
   {
-    fsm1.new_state = 6;
+    menus.new_state = 4;
   }
-  else if(fsm1.state == 5 && S1 && !prevS1)
+  else if (menus.state == 6 && S4 && !prevS4)
   {
-    fsm1.new_state = 4;
+    menus.new_state = 1;
   }
-  else if (fsm1.state == 6 && S4 && !prevS4)
+  else if (menus.state == 6 && S1 && !prevS1)
   {
-    fsm1.new_state = 7;
-  }
-  else if(fsm1.state == 6 && S1 && !prevS1)
-  {
-    fsm1.new_state = 5;
-  }
-  else if (fsm1.state == 7 && S4 && !prevS4)
-  {
-    fsm1.new_state = 0;
-  }
-  else if(fsm1.state == 7 && S1 && !prevS1)
-  {
-    fsm1.new_state = 6;
+    menus.new_state = 5;
   }
 
+  // PRICE FSM
+  // Calculate next state for the price state machine (use S2 and S3 to navigate between states)
+  if(menus.state != 1)
+  {
+    price.new_state = 0; // Deactivate price fsm
+  }
+  if (price.state == 0 && menus.state == 1) // Prices menu
+  {
+    price.new_state = 1; // Activate price fsm
+    aux = 1;
+  }
+  else if (price.state == 1 && S3 && !prevS3)
+  {
+    price.new_state = 2;
+    aux = 1;
+  }
+  else if (price.state == 1 && S2 && !prevS2)
+  {
+    price.new_state = 3;
+    aux = 1;
+  }
+  else if (price.state == 2 && S3 && !prevS3)
+  {
+    price.new_state = 3;
+    aux = 1;
+  }
+  else if (price.state == 2 && S2 && !prevS2)
+  {
+    price.new_state = 1;
+    aux = 1;
+  }
+  else if (price.state == 3 && S3 && !prevS3)
+  {
+    price.new_state = 1;
+    aux = 1;
+  }
+  else if (price.state == 3 && S2 && !prevS2)
+  {
+    price.new_state = 2;
+    aux = 1;
+  }
+
+  // ON_OFF FSM
+  // Calculate next state for the on_off state machine
+  if (on_off.state == 0 && (S1 && !prevS1 || S2 && !prevS2 || S3 && !prevS3 || S4 && !prevS4))
+  {
+    on_off.new_state = 1;
+    menus.new_state = 1;  // Unfreezes menus sm
+  }
+  else if (on_off.state == 1 && S1 && S4) // Turn off if S1 and S4 are pressed simultaneously
+  {
+    on_off.new_state = 0;
+    menus.new_state = 0; // Freezes menus sm
+  }
 
   // Update the states
-  set_state(fsm1, fsm1.new_state);
+  set_state(on_off, on_off.new_state);
+  set_state(menus, menus.new_state);
+  set_state(price, price.new_state);
 
-  // Actions set by the current state of the first state machine
-  if (fsm1.state == 0)
+  // Actions set by the current state of the price state machine
+  if (price.state == 1 && aux) // Current price menu
   {
-    // DO SOMETHING
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 5);
+    display.println("Current price:");
+    display.setCursor(0, 15);
+    display.println(price_current);
+    display.setCursor(0, 30);
+    display.println("Use S2/S3 to navigate between future price previsions");
+    display.display();
+    aux = 0;
   }
-  else if (fsm1.state == 1)
+  else if (price.state == 2) // Tomorrows price menu
   {
-    // DO SOMETHING
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 5);
+    display.println("Tomorrow's price:");
+    display.setCursor(0, 15);
+    display.println(price_nextday);
+    display.setCursor(0, 30);
+    display.println("Use S2/S3 to navigate between future price previsions");
+    display.display();
+    aux = 0;
   }
-  else if (fsm1.state == 2)
+  else if (price.state == 3) // Next weeks price menu
   {
-    // DO SOMETHING
-  }
-  else if (fsm1.state == 3)
-  {
-    // DO SOMETHING
-  }
-  else if (fsm1.state == 4)
-  {
-    // DO SOMETHING
-  }
-  else if (fsm1.state == 5)
-  {
-    // DO SOMETHING
-  }
-  else if (fsm1.state == 6)
-  {
-    // DO SOMETHING
-  }
-  else if (fsm1.state == 7)
-  {
-    // DO SOMETHING
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 5);
+    display.println("Next week's price:");
+    display.setCursor(0, 15);
+    display.println(price_nextweek);
+    display.setCursor(0, 30);
+    display.println("Use S2/S3 to navigate between future price previsions");
+    display.display();
+    aux = 0;
   }
 
 
@@ -214,8 +277,11 @@ void loop()
   Serial.print(" S4: ");
   Serial.print(S4);
 
-  Serial.print(" fsm1.state: ");
-  Serial.print(fsm1.state);
+  Serial.print(" on_off.state: ");
+  Serial.print(on_off.state);
+
+  Serial.print(" menus.state: ");
+  Serial.print(menus.state);
 
   Serial.print(" loop: ");
   Serial.println(micros() - loop_micros);
