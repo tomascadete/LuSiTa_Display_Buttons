@@ -32,9 +32,9 @@ uint8_t S3, prevS3;
 uint8_t S4, prevS4;
 
 // Our finite state machine
-fsm_t on_off, menus, price;
+fsm_t on_off, menus, price, mode;
 
-int aux = 1;
+int aux = 1, tariff_mode = 1;
 float price_current = 0.0, price_nextday = 0.0, price_nextweek = 0.0;
 
 unsigned long interval, last_cycle;
@@ -105,6 +105,7 @@ void loop()
   on_off.tis = cur_time - on_off.tes;
   menus.tis = cur_time - menus.tes;
   price.tis = cur_time - price.tes;
+  mode.tis = cur_time - mode.tes;
 
   // Calculate next state for the menus state machine (if not frozen)
   if (menus.state == 1 && S4 && !prevS4)
@@ -161,8 +162,9 @@ void loop()
   if(menus.state != 1)
   {
     price.new_state = 0; // Deactivate price fsm
+    aux = 1;
   }
-  if (price.state == 0 && menus.state == 1) // Prices menu
+  else if (price.state == 0 && menus.state == 1) // Prices menu
   {
     price.new_state = 1; // Activate price fsm
     aux = 1;
@@ -198,6 +200,49 @@ void loop()
     aux = 1;
   }
 
+  // MODE FSM
+  // Calculate next state for the mode state machine (use S2 and S3 to navigate between modes)
+  if(menus.state != 2)
+  {
+    mode.new_state = 0; // Deactivate mode fsm
+    aux = 1;
+  }
+  else if (mode.state == 0 && menus.state == 2) // Mode menu
+  {
+    mode.new_state = 1; // Activate mode fsm
+    aux = 1;
+  }
+  else if (mode.state == 1 && S3 && !prevS3)
+  {
+    mode.new_state = 2;
+    aux = 1;
+  }
+  else if (mode.state == 1 && S2 && !prevS2)
+  {
+    mode.new_state = 3;
+    aux = 1;
+  }
+  else if (mode.state == 2 && S3 && !prevS3)
+  {
+    mode.new_state = 3;
+    aux = 1;
+  }
+  else if (mode.state == 2 && S2 && !prevS2)
+  {
+    mode.new_state = 1;
+    aux = 1;
+  }
+  else if (mode.state == 3 && S3 && !prevS3)
+  {
+    mode.new_state = 1;
+    aux = 1;
+  }
+  else if (mode.state == 3 && S2 && !prevS2)
+  {
+    mode.new_state = 2;
+    aux = 1;
+  }
+
   // ON_OFF FSM
   // Calculate next state for the on_off state machine
   if (on_off.state == 0 && (S1 && !prevS1 || S2 && !prevS2 || S3 && !prevS3 || S4 && !prevS4))
@@ -215,6 +260,12 @@ void loop()
   set_state(on_off, on_off.new_state);
   set_state(menus, menus.new_state);
   set_state(price, price.new_state);
+  set_state(mode, mode.new_state);
+
+  // Update tariff mode
+  if (mode.state == 1) tariff_mode = 1;
+  else if (mode.state == 2) tariff_mode = 2;
+  else if (mode.state == 3) tariff_mode = 3;
 
   // Actions set by the current state of the price state machine
   if (price.state == 1 && aux) // Current price menu
@@ -262,6 +313,24 @@ void loop()
     display.display();
     aux = 0;
   }
+
+  // Actions set by the current state of the mode state machine
+  if (mode.state !=0 && aux)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 5);
+    display.println("Current tariff mode:");
+    display.setCursor(0, 15);
+    display.println(tariff_mode);
+    display.setCursor(0, 30);
+    display.println("Use S2/S3 to change  tariff mode");
+    display.display();
+    aux = 0;
+  }
+  
 
 
   // Debug using the serial port
