@@ -32,9 +32,9 @@ uint8_t S3, prevS3;
 uint8_t S4, prevS4;
 
 // Our finite state machine
-fsm_t on_off, menus, price, mode;
+fsm_t on_off, menus, price, mode, tariff;
 
-int aux = 1, tariff_mode = 1;
+int aux = 1, saved_mode = 1, saved_tariff = 1;
 float price_current = 0.0, price_nextday = 0.0, price_nextweek = 0.0;
 
 unsigned long interval, last_cycle;
@@ -106,6 +106,7 @@ void loop()
   menus.tis = cur_time - menus.tes;
   price.tis = cur_time - price.tes;
   mode.tis = cur_time - mode.tes;
+  tariff.tis = cur_time - tariff.tes;
 
   // Calculate next state for the menus state machine (if not frozen)
   if (menus.state == 1 && S4 && !prevS4)
@@ -243,9 +244,52 @@ void loop()
     aux = 1;
   }
 
+  // TARIFF FSM
+  // Calculate next state for the tariff state machine (use S2 and S3 to navigate between tariffs)
+  if(menus.state != 3)
+  {
+    tariff.new_state = 0; // Deactivate tariff fsm
+    aux = 1;
+  }
+  else if (tariff.state == 0 && menus.state == 3) // Tariff menu
+  {
+    tariff.new_state = 1; // Activate tariff fsm
+    aux = 1;
+  }
+  else if (tariff.state == 1 && S3 && !prevS3)
+  {
+    tariff.new_state = 2;
+    aux = 1;
+  }
+  else if (tariff.state == 1 && S2 && !prevS2)
+  {
+    tariff.new_state = 3;
+    aux = 1;
+  }
+  else if (tariff.state == 2 && S3 && !prevS3)
+  {
+    tariff.new_state = 3;
+    aux = 1;
+  }
+  else if (tariff.state == 2 && S2 && !prevS2)
+  {
+    tariff.new_state = 1;
+    aux = 1;
+  }
+  else if (tariff.state == 3 && S3 && !prevS3)
+  {
+    tariff.new_state = 1;
+    aux = 1;
+  }
+  else if (tariff.state == 3 && S2 && !prevS2)
+  {
+    tariff.new_state = 2;
+    aux = 1;
+  }
+
   // ON_OFF FSM
   // Calculate next state for the on_off state machine
-  if (on_off.state == 0 && (S1 && !prevS1 || S2 && !prevS2 || S3 && !prevS3 || S4 && !prevS4))
+  if (on_off.state == 0 && ((S1 && !prevS1) || (S2 && !prevS2) || (S3 && !prevS3) || (S4 && !prevS4)))
   {
     on_off.new_state = 1;
     menus.new_state = 1;  // Unfreezes menus sm
@@ -261,11 +305,17 @@ void loop()
   set_state(menus, menus.new_state);
   set_state(price, price.new_state);
   set_state(mode, mode.new_state);
+  set_state(tariff, tariff.new_state);
 
-  // Update tariff mode
-  if (mode.state == 1) tariff_mode = 1;
-  else if (mode.state == 2) tariff_mode = 2;
-  else if (mode.state == 3) tariff_mode = 3;
+  // Update saved_mode
+  if (mode.state == 1) saved_mode = 1;
+  else if (mode.state == 2) saved_mode = 2;
+  else if (mode.state == 3) saved_mode = 3;
+
+  // Update saved_tariff
+  if (tariff.state == 1) saved_tariff = 1;
+  else if (tariff.state == 2) saved_tariff = 2;
+  else if (tariff.state == 3) saved_tariff = 3;
 
   // Actions set by the current state of the price state machine
   if (price.state == 1 && aux) // Current price menu
@@ -322,15 +372,31 @@ void loop()
     display.setTextSize(1);
     display.setFont(NULL);
     display.setCursor(0, 5);
-    display.println("Current tariff mode:");
+    display.println("Current mode:");
     display.setCursor(0, 15);
-    display.println(tariff_mode);
+    display.println(saved_mode);
     display.setCursor(0, 30);
-    display.println("Use S2/S3 to change  tariff mode");
+    display.println("Use S2/S3 to change  mode");
     display.display();
     aux = 0;
   }
-  
+
+  // Actions set by the current state of the tariff state machine
+  if (tariff.state !=0 && aux)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 5);
+    display.println("Current tariff:");
+    display.setCursor(0, 15);
+    display.println(saved_tariff);
+    display.setCursor(0, 30);
+    display.println("Use S2/S3 to change  tariff");
+    display.display();
+    aux = 0;
+  }
 
 
   // Debug using the serial port
@@ -351,6 +417,15 @@ void loop()
 
   Serial.print(" menus.state: ");
   Serial.print(menus.state);
+
+  Serial.print(" price.state: ");
+  Serial.print(price.state);
+
+  Serial.print(" mode.state: ");
+  Serial.print(mode.state);
+
+  Serial.print(" tariff.state: ");
+  Serial.print(tariff.state);
 
   Serial.print(" loop: ");
   Serial.println(micros() - loop_micros);
