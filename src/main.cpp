@@ -32,8 +32,10 @@ uint8_t S3, prevS3;
 uint8_t S4, prevS4;
 
 // Our finite state machine
-fsm_t on_off, menus, price, mode, tariff, limits, battery;
+fsm_t on_off, menus, price, mode, tariff, limits, battery, wifi;
 
+bool wifi_connected = true;
+char ssid[32] = "SSID";
 int aux = 1, saved_mode = 1, saved_tariff = 1, battery_level = 99;
 float price_current = 0.0, price_nextday = 0.0, price_nextweek = 0.0, limit_low = 0.0, limit_high = 0.0;
 
@@ -109,6 +111,7 @@ void loop()
   tariff.tis = cur_time - tariff.tes;
   limits.tis = cur_time - limits.tes;
   battery.tis = cur_time - battery.tes;
+  wifi.tis = cur_time - wifi.tes;
 
   // Calculate next state for the menus state machine (if not frozen)
   if (menus.state == 1 && S4 && !prevS4)
@@ -315,6 +318,21 @@ void loop()
     aux = 1;
   }
 
+  // WIFI FSM
+  // Calculate the next state for the wifi state machine (no navigation, only display of wifi status and SSID)
+  // If wifi is not connected, display "Not connected"
+  // IF wifi is connected, display "Connected to: " + SSID
+  if(menus.state != 6)
+  {
+    wifi.new_state = 0; // Deactivate wifi fsm
+    aux = 1;
+  }
+  else if (wifi.state == 0 && menus.state == 6) // Wifi menu
+  {
+    wifi.new_state = 1; // Activate wifi fsm
+    aux = 1;
+  }
+
   // ON_OFF FSM
   // Calculate next state for the on_off state machine
   if (on_off.state == 0 && ((S1 && !prevS1) || (S2 && !prevS2) || (S3 && !prevS3) || (S4 && !prevS4)))
@@ -336,6 +354,7 @@ void loop()
   set_state(tariff, tariff.new_state);
   set_state(limits, limits.new_state);
   set_state(battery, battery.new_state);
+  set_state(wifi, wifi.new_state);
 
   // Update saved_mode
   if (mode.state == 1) saved_mode = 1;
@@ -353,6 +372,9 @@ void loop()
 
   // Update battery level (TODO: implement a way to get the battery level)
   battery_level = 99;
+
+  // Update wifi status (TODO: implement a way to get the wifi status)
+  wifi_connected = true;
 
   // Actions set by the current state of the price state machine
   if (price.state == 1 && aux) // Current price menu
@@ -469,6 +491,39 @@ void loop()
     aux = 0;
   }
 
+  // Actions set by the current state of the wifi state machine
+  if (wifi.state == 1 && aux)
+  {
+    if (wifi_connected)
+    {
+      display.clearDisplay();
+      display.setTextColor(WHITE);
+      display.setTextSize(1);
+      display.setFont(NULL);
+      display.setCursor(0, 5);
+      display.println("Connected to Wi-FI!");
+      display.setCursor(0, 20);
+      display.println("SSID:");
+      display.setCursor(0, 40);
+      display.println("ssid");
+      display.display();
+      aux = 0;
+    }
+    else
+    {
+      display.clearDisplay();
+      display.setTextColor(WHITE);
+      display.setTextSize(1);
+      display.setFont(NULL);
+      display.setCursor(0, 5);
+      display.println("No Wi-Fi connection");
+      display.setCursor(0, 25);
+      display.println("Please configure the Wi-Fi using the APP  or your browser");
+      display.display();
+      aux = 0;
+    }
+  }
+
 
   // Debug using the serial port
   Serial.print("S1: ");
@@ -503,6 +558,9 @@ void loop()
 
   Serial.print(" battery.state: ");
   Serial.print(battery.state);
+
+  Serial.print(" wifi.state: ");
+  Serial.print(wifi.state);
 
   Serial.print(" loop: ");
   Serial.println(micros() - loop_micros);
