@@ -32,10 +32,10 @@ uint8_t S3, prevS3;
 uint8_t S4, prevS4;
 
 // Our finite state machine
-fsm_t on_off, menus, price, mode, tariff;
+fsm_t on_off, menus, price, mode, tariff, limits, battery;
 
-int aux = 1, saved_mode = 1, saved_tariff = 1;
-float price_current = 0.0, price_nextday = 0.0, price_nextweek = 0.0;
+int aux = 1, saved_mode = 1, saved_tariff = 1, battery_level = 99;
+float price_current = 0.0, price_nextday = 0.0, price_nextweek = 0.0, limit_low = 0.0, limit_high = 0.0;
 
 unsigned long interval, last_cycle;
 unsigned long loop_micros;
@@ -107,6 +107,8 @@ void loop()
   price.tis = cur_time - price.tes;
   mode.tis = cur_time - mode.tes;
   tariff.tis = cur_time - tariff.tes;
+  limits.tis = cur_time - limits.tes;
+  battery.tis = cur_time - battery.tes;
 
   // Calculate next state for the menus state machine (if not frozen)
   if (menus.state == 1 && S4 && !prevS4)
@@ -287,6 +289,32 @@ void loop()
     aux = 1;
   }
 
+  // LIMITS FSM
+  // Calculate the next state for the limits state machine (no navigation, only display of set limits)
+  if(menus.state != 4)
+  {
+    limits.new_state = 0; // Deactivate limits fsm
+    aux = 1;
+  }
+  else if (limits.state == 0 && menus.state == 4) // Limits menu
+  {
+    limits.new_state = 1; // Activate limits fsm
+    aux = 1;
+  }
+
+  // BATTERY FSM
+  // Calculate the next state for the battery state machine (no navigation, only display of battery status)
+  if(menus.state != 5)
+  {
+    battery.new_state = 0; // Deactivate battery fsm
+    aux = 1;
+  }
+  else if (battery.state == 0 && menus.state == 5) // Battery menu
+  {
+    battery.new_state = 1; // Activate battery fsm
+    aux = 1;
+  }
+
   // ON_OFF FSM
   // Calculate next state for the on_off state machine
   if (on_off.state == 0 && ((S1 && !prevS1) || (S2 && !prevS2) || (S3 && !prevS3) || (S4 && !prevS4)))
@@ -306,6 +334,8 @@ void loop()
   set_state(price, price.new_state);
   set_state(mode, mode.new_state);
   set_state(tariff, tariff.new_state);
+  set_state(limits, limits.new_state);
+  set_state(battery, battery.new_state);
 
   // Update saved_mode
   if (mode.state == 1) saved_mode = 1;
@@ -316,6 +346,13 @@ void loop()
   if (tariff.state == 1) saved_tariff = 1;
   else if (tariff.state == 2) saved_tariff = 2;
   else if (tariff.state == 3) saved_tariff = 3;
+
+  // Update limit_low and limit_high (TODO: get the limit values from the cloud)
+  limit_low = 5;
+  limit_high = 10;
+
+  // Update battery level (TODO: implement a way to get the battery level)
+  battery_level = 99;
 
   // Actions set by the current state of the price state machine
   if (price.state == 1 && aux) // Current price menu
@@ -398,6 +435,40 @@ void loop()
     aux = 0;
   }
 
+  // Actions set by the current state of the limits state machine
+  if (limits.state == 1 && aux)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 5);
+    display.println("Current defined limit");
+    display.setCursor(0, 20);
+    display.print("Low limit:");
+    display.println(limit_low);
+    display.setCursor(0, 35);
+    display.print("High limit:");
+    display.println(limit_high);
+    display.display();
+    aux = 0;
+  }
+
+  // Actions set by the current state of the battery state machine
+  if (battery.state == 1 && aux)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 5);
+    display.println("Current battery level");
+    display.setCursor(0, 30);
+    display.println(battery_level);
+    display.display();
+    aux = 0;
+  }
+
 
   // Debug using the serial port
   Serial.print("S1: ");
@@ -426,6 +497,12 @@ void loop()
 
   Serial.print(" tariff.state: ");
   Serial.print(tariff.state);
+
+  Serial.print(" limits.state: ");
+  Serial.print(limits.state);
+
+  Serial.print(" battery.state: ");
+  Serial.print(battery.state);
 
   Serial.print(" loop: ");
   Serial.println(micros() - loop_micros);
