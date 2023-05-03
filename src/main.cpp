@@ -72,10 +72,19 @@ void setup()
   
   // Show initial display buffer contents on the screen --
   // the library initializes this with an Adafruit splash screen.
+  display.clearDisplay();
+  display.setTextColor(WHITE);
+  display.setTextSize(1);
+  display.setFont(NULL);
+  display.setCursor(0, 5);
+  display.println("Current price:");
+  display.setCursor(0, 15);
+  display.println(price_current);
+  display.setCursor(0, 30);
+  display.println("Use S2/S3 to navigate between future price previsions");
   display.display();
 
-  // Clear the buffer
-  // display.clearDisplay();
+  delay(5000);
 }
 
 void loop()
