@@ -33,11 +33,11 @@ uint8_t S3, prevS3;
 uint8_t S4, prevS4;
 
 // Our finite state machine
-fsm_t on_off, menus, price, mode, tariff, limits, battery, wifi;
+fsm_t on_off, menus, price, tariff, limits, battery, wifi;
 
 bool wifi_connected = true;
-char ssid[32] = "SSID";
-int aux = 1, saved_mode = 1, saved_tariff = 1, battery_level = 99;
+char ssid[32] = "eduroam";
+int aux = 1, saved_tariff = 1, battery_level = 99;
 float price_current = 0.0, price_nextday = 0.0, price_nextweek = 0.0, limit_low = 0.0, limit_high = 0.0;
 
 unsigned long interval, last_cycle;
@@ -71,22 +71,9 @@ void setup()
     Serial.println(F("SSD1306 allocation failed"));
     for(;;); // Don't proceed, loop forever
   }
-  
-  // Show initial display buffer contents on the screen --
-  // the library initializes this with an Adafruit splash screen.
-  display.clearDisplay();
-  display.setTextColor(WHITE);
-  display.setTextSize(1);
-  display.setFont(NULL);
-  display.setCursor(0, 5);
-  display.println("Current price:");
-  display.setCursor(0, 15);
-  display.println(price_current);
-  display.setCursor(0, 30);
-  display.println("Use S2/S3 to navigate between future price previsions");
-  display.display();
 
-  delay(5000);
+  tariff.new_state = 1;
+  set_state(tariff, tariff.new_state);
 }
 
 void loop()
@@ -118,28 +105,19 @@ void loop()
   on_off.tis = cur_time - on_off.tes;
   menus.tis = cur_time - menus.tes;
   price.tis = cur_time - price.tes;
-  mode.tis = cur_time - mode.tes;
   tariff.tis = cur_time - tariff.tes;
   limits.tis = cur_time - limits.tes;
   battery.tis = cur_time - battery.tes;
   wifi.tis = cur_time - wifi.tes;
 
-  // Calculate next state for the menus state machine (if not frozen)
+  // Calculate next state for the menus state machine (use S1 and S4 to navigate between states)
   if (menus.state == 1 && S4 && !prevS4)
   {
-    menus.new_state = 2;
+    menus.new_state = 3;
   }
   else if (menus.state == 1 && S1 && !prevS1)
   {
     menus.new_state = 6;
-  }
-  else if (menus.state == 2 && S4 && !prevS4)
-  {
-    menus.new_state = 3;
-  }
-  else if(menus.state == 2 && S1 && !prevS1)
-  {
-    menus.new_state = 1;
   }
   else if (menus.state == 3 && S4 && !prevS4)
   {
@@ -147,7 +125,7 @@ void loop()
   }
   else if (menus.state == 3 && S1 && !prevS1)
   {
-    menus.new_state = 2;
+    menus.new_state = 1;
   }
   else if (menus.state == 4 && S4 && !prevS4)
   {
@@ -175,7 +153,7 @@ void loop()
   }
 
   // PRICE FSM
-  // Calculate next state for the price state machine (use S2 and S3 to navigate between states)
+  // Calculate next state for the price state machine (use S2 and S3 to navigate between price displays)
   if(menus.state != 1)
   {
     price.new_state = 0; // Deactivate price fsm
@@ -217,90 +195,40 @@ void loop()
     aux = 1;
   }
 
-  // MODE FSM
-  // Calculate next state for the mode state machine (use S2 and S3 to navigate between modes)
-  if(menus.state != 2)
-  {
-    mode.new_state = 0; // Deactivate mode fsm
-    aux = 1;
-  }
-  else if (mode.state == 0 && menus.state == 2) // Mode menu
-  {
-    mode.new_state = 1; // Activate mode fsm
-    aux = 1;
-  }
-  else if (mode.state == 1 && S3 && !prevS3)
-  {
-    mode.new_state = 2;
-    aux = 1;
-  }
-  else if (mode.state == 1 && S2 && !prevS2)
-  {
-    mode.new_state = 3;
-    aux = 1;
-  }
-  else if (mode.state == 2 && S3 && !prevS3)
-  {
-    mode.new_state = 3;
-    aux = 1;
-  }
-  else if (mode.state == 2 && S2 && !prevS2)
-  {
-    mode.new_state = 1;
-    aux = 1;
-  }
-  else if (mode.state == 3 && S3 && !prevS3)
-  {
-    mode.new_state = 1;
-    aux = 1;
-  }
-  else if (mode.state == 3 && S2 && !prevS2)
-  {
-    mode.new_state = 2;
-    aux = 1;
-  }
-
   // TARIFF FSM
-  // Calculate next state for the tariff state machine (use S2 and S3 to navigate between tariffs)
-  if(menus.state != 3)
+  // Calculate next state for the tariff state machine (use S2 and S3 to navigate between tariffs when in the tariffs menu)
+  if(menus.state == 3)
   {
-    tariff.new_state = 0; // Deactivate tariff fsm
-    aux = 1;
-  }
-  else if (tariff.state == 0 && menus.state == 3) // Tariff menu
-  {
-    tariff.new_state = 1; // Activate tariff fsm
-    aux = 1;
-  }
-  else if (tariff.state == 1 && S3 && !prevS3)
-  {
-    tariff.new_state = 2;
-    aux = 1;
-  }
-  else if (tariff.state == 1 && S2 && !prevS2)
-  {
-    tariff.new_state = 3;
-    aux = 1;
-  }
-  else if (tariff.state == 2 && S3 && !prevS3)
-  {
-    tariff.new_state = 3;
-    aux = 1;
-  }
-  else if (tariff.state == 2 && S2 && !prevS2)
-  {
-    tariff.new_state = 1;
-    aux = 1;
-  }
-  else if (tariff.state == 3 && S3 && !prevS3)
-  {
-    tariff.new_state = 1;
-    aux = 1;
-  }
-  else if (tariff.state == 3 && S2 && !prevS2)
-  {
-    tariff.new_state = 2;
-    aux = 1;
+    if (tariff.state == 1 && S3 && !prevS3)
+    {
+      tariff.new_state = 2;
+      aux = 1;
+    }
+    else if (tariff.state == 1 && S2 && !prevS2)
+    {
+      tariff.new_state = 3;
+      aux = 1;
+    }
+    else if (tariff.state == 2 && S3 && !prevS3)
+    {
+      tariff.new_state = 3;
+      aux = 1;
+    }
+    else if (tariff.state == 2 && S2 && !prevS2)
+    {
+      tariff.new_state = 1;
+      aux = 1;
+    }
+    else if (tariff.state == 3 && S3 && !prevS3)
+    {
+      tariff.new_state = 1;
+      aux = 1;
+    }
+    else if (tariff.state == 3 && S2 && !prevS2)
+    {
+      tariff.new_state = 2;
+      aux = 1;
+    }
   }
 
   // LIMITS FSM
@@ -355,22 +283,22 @@ void loop()
   {
     on_off.new_state = 0;
     menus.new_state = 0; // Freezes menus sm
+    aux = 1;
   }
 
   // Update the states
   set_state(on_off, on_off.new_state);
   set_state(menus, menus.new_state);
   set_state(price, price.new_state);
-  set_state(mode, mode.new_state);
   set_state(tariff, tariff.new_state);
   set_state(limits, limits.new_state);
   set_state(battery, battery.new_state);
   set_state(wifi, wifi.new_state);
 
-  // Update saved_mode
-  if (mode.state == 1) saved_mode = 1;
-  else if (mode.state == 2) saved_mode = 2;
-  else if (mode.state == 3) saved_mode = 3;
+  // Update price_current (TODO: get the prices from the cloud)
+  price_current = 0.5;
+  price_nextday = 0.6;
+  price_nextweek = 0.7;
 
   // Update saved_tariff
   if (tariff.state == 1) saved_tariff = 1;
@@ -387,6 +315,13 @@ void loop()
   // Update wifi status (TODO: implement a way to get the wifi status)
   wifi_connected = true;
 
+  if (on_off.state == 0)
+  {
+    display.clearDisplay();
+    display.display();
+    aux = 0;
+  }
+
   // Actions set by the current state of the price state machine
   if (price.state == 1 && aux) // Current price menu
   {
@@ -394,12 +329,11 @@ void loop()
     display.setTextColor(WHITE);
     display.setTextSize(1);
     display.setFont(NULL);
-    display.setCursor(0, 5);
+    display.setCursor(0, 0);
     display.println("Current price:");
-    display.setCursor(0, 15);
     display.println(price_current);
-    display.setCursor(0, 30);
-    display.println("Use S2/S3 to navigate between future price previsions");
+    display.setCursor(0, 20);
+    display.println("Use S2/S3 to navigate");
     display.display();
     aux = 0;
   }
@@ -409,12 +343,11 @@ void loop()
     display.setTextColor(WHITE);
     display.setTextSize(1);
     display.setFont(NULL);
-    display.setCursor(0, 5);
-    display.println("Tomorrow's price:");
-    display.setCursor(0, 15);
+    display.setCursor(0, 0);
+    display.println("Price in 24h:");
     display.println(price_nextday);
-    display.setCursor(0, 30);
-    display.println("Use S2/S3 to navigate between future price previsions");
+    display.setCursor(0, 20);
+    display.println("Use S2/S3 to navigate");
     display.display();
     aux = 0;
   }
@@ -424,46 +357,28 @@ void loop()
     display.setTextColor(WHITE);
     display.setTextSize(1);
     display.setFont(NULL);
-    display.setCursor(0, 5);
+    display.setCursor(0, 0);
     display.println("Next week's price:");
-    display.setCursor(0, 15);
     display.println(price_nextweek);
-    display.setCursor(0, 30);
-    display.println("Use S2/S3 to navigate between future price previsions");
+    display.setCursor(0, 20);
+    display.println("Use S2/S3 to navigate");
     display.display();
     aux = 0;
   }
 
-  // Actions set by the current state of the mode state machine
-  if (mode.state !=0 && aux)
-  {
-    display.clearDisplay();
-    display.setTextColor(WHITE);
-    display.setTextSize(1);
-    display.setFont(NULL);
-    display.setCursor(0, 5);
-    display.println("Current mode:");
-    display.setCursor(0, 15);
-    display.println(saved_mode);
-    display.setCursor(0, 30);
-    display.println("Use S2/S3 to change  mode");
-    display.display();
-    aux = 0;
-  }
 
   // Actions set by the current state of the tariff state machine
-  if (tariff.state !=0 && aux)
+  if (menus.state == 3 && aux)
   {
     display.clearDisplay();
     display.setTextColor(WHITE);
     display.setTextSize(1);
     display.setFont(NULL);
-    display.setCursor(0, 5);
+    display.setCursor(0, 0);
     display.println("Current tariff:");
-    display.setCursor(0, 15);
     display.println(saved_tariff);
-    display.setCursor(0, 30);
-    display.println("Use S2/S3 to change  tariff");
+    display.setCursor(0, 20);
+    display.println("Use S2/S3 to change");
     display.display();
     aux = 0;
   }
@@ -475,13 +390,12 @@ void loop()
     display.setTextColor(WHITE);
     display.setTextSize(1);
     display.setFont(NULL);
-    display.setCursor(0, 5);
-    display.println("Current defined limit");
-    display.setCursor(0, 20);
-    display.print("Low limit:");
+    display.setCursor(0, 0);
+    display.println("Current limits");
+    display.setCursor(0, 11);
+    display.print("Low: ");
     display.println(limit_low);
-    display.setCursor(0, 35);
-    display.print("High limit:");
+    display.print("High: ");
     display.println(limit_high);
     display.display();
     aux = 0;
@@ -494,10 +408,11 @@ void loop()
     display.setTextColor(WHITE);
     display.setTextSize(1);
     display.setFont(NULL);
-    display.setCursor(0, 5);
+    display.setCursor(0, 0);
     display.println("Current battery level");
-    display.setCursor(0, 30);
-    display.println(battery_level);
+    display.setCursor(0, 15);
+    display.print(battery_level);
+    display.print(" %");
     display.display();
     aux = 0;
   }
@@ -511,12 +426,11 @@ void loop()
       display.setTextColor(WHITE);
       display.setTextSize(1);
       display.setFont(NULL);
-      display.setCursor(0, 5);
-      display.println("Connected to Wi-FI!");
-      display.setCursor(0, 20);
-      display.println("SSID:");
-      display.setCursor(0, 40);
-      display.println("ssid");
+      display.setCursor(0, 0);
+      display.println("Connected to Wi-Fi!");
+      display.setCursor(0, 15);
+      display.print("SSID: ");
+      display.println(ssid);
       display.display();
       aux = 0;
     }
@@ -526,9 +440,8 @@ void loop()
       display.setTextColor(WHITE);
       display.setTextSize(1);
       display.setFont(NULL);
-      display.setCursor(0, 5);
-      display.println("No Wi-Fi connection");
-      display.setCursor(0, 25);
+      display.setCursor(0, 0);
+      display.println("No Wi-Fi connection.");
       display.println("Please configure the Wi-Fi using the APP  or your browser");
       display.display();
       aux = 0;
@@ -557,9 +470,6 @@ void loop()
 
   Serial.print(" price.state: ");
   Serial.print(price.state);
-
-  Serial.print(" mode.state: ");
-  Serial.print(mode.state);
 
   Serial.print(" tariff.state: ");
   Serial.print(tariff.state);
