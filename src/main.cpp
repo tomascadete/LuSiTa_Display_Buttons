@@ -13,10 +13,10 @@ TwoWire CustomI2C0(16, 17); // SDA, SCL
 // Initialize the SSD1306 display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &CustomI2C0, -1);
 
-#define PIN_S1 12
-#define PIN_S2 13
-#define PIN_S3 14
-#define PIN_S4 15
+#define PIN_BUTTON_LEFT 12
+#define PIN_BUTTON_HOME 13
+#define PIN_BUTTON_OK 14
+#define PIN_BUTTON_RIGHT 15
 
 typedef struct {
   int state, new_state;
@@ -27,10 +27,10 @@ typedef struct {
 } fsm_t;
 
 // Input variables
-uint8_t S1, prevS1;
-uint8_t S2, prevS2;
-uint8_t S3, prevS3;
-uint8_t S4, prevS4;
+uint8_t LEFT, prevLEFT;
+uint8_t HOME, prevHOME;
+uint8_t OK, prevOK;
+uint8_t RIGHT, prevRIGHT;
 
 // Our finite state machine
 fsm_t on_off, menus, price, tariff, limits, battery, wifi;
@@ -59,10 +59,10 @@ void setup()
   // put your setup code here, to run once:
   // Initialize serial and wait for port to open:
   Serial.begin(9600);
-  pinMode(PIN_S1, INPUT_PULLUP);
-  pinMode(PIN_S2, INPUT_PULLUP);
-  pinMode(PIN_S3, INPUT_PULLUP);
-  pinMode(PIN_S4, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_LEFT, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_HOME, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_OK, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_RIGHT, INPUT_PULLUP);
 
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -90,14 +90,14 @@ void loop()
   }
 
   // Read the inputs
-  prevS1 = S1;
-  prevS2 = S2;
-  prevS3 = S3;
-  prevS4 = S4;
-  S1 = !digitalRead(PIN_S1);
-  S2 = !digitalRead(PIN_S2);
-  S3 = !digitalRead(PIN_S3);
-  S4 = !digitalRead(PIN_S4);
+  prevLEFT = LEFT;
+  prevHOME = HOME;
+  prevOK = OK;
+  prevRIGHT = RIGHT;
+  LEFT = !digitalRead(PIN_BUTTON_LEFT);
+  HOME = !digitalRead(PIN_BUTTON_HOME);
+  OK = !digitalRead(PIN_BUTTON_OK);
+  RIGHT = !digitalRead(PIN_BUTTON_RIGHT);
 
   // FSM processing
   // Update tis for all state machines
@@ -110,50 +110,50 @@ void loop()
   battery.tis = cur_time - battery.tes;
   wifi.tis = cur_time - wifi.tes;
 
-  // Calculate next state for the menus state machine (use S1 and S4 to navigate between states)
-  if (menus.state == 1 && S4 && !prevS4)
+  // Calculate next state for the menus state machine (use LEFT and RIGHT to navigate between states)
+  if (menus.state == 1 && RIGHT && !prevRIGHT)
   {
     menus.new_state = 3;
   }
-  else if (menus.state == 1 && S1 && !prevS1)
+  else if (menus.state == 1 && LEFT && !prevLEFT)
   {
     menus.new_state = 6;
   }
-  else if (menus.state == 3 && S4 && !prevS4)
+  else if (menus.state == 3 && RIGHT && !prevRIGHT)
   {
     menus.new_state = 4;
   }
-  else if (menus.state == 3 && S1 && !prevS1)
+  else if (menus.state == 3 && LEFT && !prevLEFT)
   {
     menus.new_state = 1;
   }
-  else if (menus.state == 4 && S4 && !prevS4)
+  else if (menus.state == 4 && RIGHT && !prevRIGHT)
   {
     menus.new_state = 5;
   }
-  else if(menus.state == 4 && S1 && !prevS1)
+  else if(menus.state == 4 && LEFT && !prevLEFT)
   {
     menus.new_state = 3;
   }
-  else if (menus.state == 5 && S4 && !prevS4)
+  else if (menus.state == 5 && RIGHT && !prevRIGHT)
   {
     menus.new_state = 6;
   }
-  else if(menus.state == 5 && S1 && !prevS1)
+  else if(menus.state == 5 && LEFT && !prevLEFT)
   {
     menus.new_state = 4;
   }
-  else if (menus.state == 6 && S4 && !prevS4)
+  else if (menus.state == 6 && RIGHT && !prevRIGHT)
   {
     menus.new_state = 1;
   }
-  else if (menus.state == 6 && S1 && !prevS1)
+  else if (menus.state == 6 && LEFT && !prevLEFT)
   {
     menus.new_state = 5;
   }
 
   // PRICE FSM
-  // Calculate next state for the price state machine (use S2 and S3 to navigate between price displays)
+  // Calculate next state for the price state machine (use HOME and OK to navigate between price displays)
   if(menus.state != 1)
   {
     price.new_state = 0; // Deactivate price fsm
@@ -164,67 +164,67 @@ void loop()
     price.new_state = 1; // Activate price fsm
     aux = 1;
   }
-  else if (price.state == 1 && S3 && !prevS3)
+  else if (price.state == 1 && OK && !prevOK)
   {
     price.new_state = 2;
     aux = 1;
   }
-  else if (price.state == 1 && S2 && !prevS2)
+  else if (price.state == 1 && HOME && !prevHOME)
   {
     price.new_state = 3;
     aux = 1;
   }
-  else if (price.state == 2 && S3 && !prevS3)
+  else if (price.state == 2 && OK && !prevOK)
   {
     price.new_state = 3;
     aux = 1;
   }
-  else if (price.state == 2 && S2 && !prevS2)
+  else if (price.state == 2 && HOME && !prevHOME)
   {
     price.new_state = 1;
     aux = 1;
   }
-  else if (price.state == 3 && S3 && !prevS3)
+  else if (price.state == 3 && OK && !prevOK)
   {
     price.new_state = 1;
     aux = 1;
   }
-  else if (price.state == 3 && S2 && !prevS2)
+  else if (price.state == 3 && HOME && !prevHOME)
   {
     price.new_state = 2;
     aux = 1;
   }
 
   // TARIFF FSM
-  // Calculate next state for the tariff state machine (use S2 and S3 to navigate between tariffs when in the tariffs menu)
+  // Calculate next state for the tariff state machine (use HOME and OK to navigate between tariffs when in the tariffs menu)
   if(menus.state == 3)
   {
-    if (tariff.state == 1 && S3 && !prevS3)
+    if (tariff.state == 1 && OK && !prevOK)
     {
       tariff.new_state = 2;
       aux = 1;
     }
-    else if (tariff.state == 1 && S2 && !prevS2)
+    else if (tariff.state == 1 && HOME && !prevHOME)
     {
       tariff.new_state = 3;
       aux = 1;
     }
-    else if (tariff.state == 2 && S3 && !prevS3)
+    else if (tariff.state == 2 && OK && !prevOK)
     {
       tariff.new_state = 3;
       aux = 1;
     }
-    else if (tariff.state == 2 && S2 && !prevS2)
+    else if (tariff.state == 2 && HOME && !prevHOME)
     {
       tariff.new_state = 1;
       aux = 1;
     }
-    else if (tariff.state == 3 && S3 && !prevS3)
+    else if (tariff.state == 3 && OK && !prevOK)
     {
       tariff.new_state = 1;
       aux = 1;
     }
-    else if (tariff.state == 3 && S2 && !prevS2)
+    else if (tariff.state == 3 && HOME && !prevHOME)
     {
       tariff.new_state = 2;
       aux = 1;
@@ -274,12 +274,12 @@ void loop()
 
   // ON_OFF FSM
   // Calculate next state for the on_off state machine
-  if (on_off.state == 0 && ((S1 && !prevS1) || (S2 && !prevS2) || (S3 && !prevS3) || (S4 && !prevS4)))
+  if (on_off.state == 0 && ((LEFT && !prevLEFT) || (HOME && !prevHOME) || (OK && !prevOK) || (RIGHT && !prevRIGHT)))
   {
     on_off.new_state = 1;
     menus.new_state = 1;  // Unfreezes menus sm
   }
-  else if (on_off.state == 1 && S1 && S4) // Turn off if S1 and S4 are pressed simultaneously
+  else if (on_off.state == 1 && LEFT && RIGHT) // Turn off if LEFT and RIGHT are pressed simultaneously
   {
     on_off.new_state = 0;
     menus.new_state = 0; // Freezes menus sm
@@ -333,7 +333,7 @@ void loop()
     display.println("Current price:");
     display.println(price_current);
     display.setCursor(0, 20);
-    display.println("Use S2/S3 to navigate");
+    display.println("Use HOME/OK to navigate");
     display.display();
     aux = 0;
   }
@@ -347,7 +347,7 @@ void loop()
     display.println("Price in 24h:");
     display.println(price_nextday);
     display.setCursor(0, 20);
-    display.println("Use S2/S3 to navigate");
+    display.println("Use HOME/OK to navigate");
     display.display();
     aux = 0;
   }
@@ -361,7 +361,7 @@ void loop()
     display.println("Next week's price:");
     display.println(price_nextweek);
     display.setCursor(0, 20);
-    display.println("Use S2/S3 to navigate");
+    display.println("Use HOME/OK to navigate");
     display.display();
     aux = 0;
   }
@@ -378,7 +378,7 @@ void loop()
     display.println("Current tariff:");
     display.println(saved_tariff);
     display.setCursor(0, 20);
-    display.println("Use S2/S3 to change");
+    display.println("Use HOME/OK to change");
     display.display();
     aux = 0;
   }
@@ -450,17 +450,17 @@ void loop()
 
 
   // Debug using the serial port
-  Serial.print("S1: ");
-  Serial.print(S1);
+  Serial.print("LEFT: ");
+  Serial.print(LEFT);
 
-  Serial.print(" S2: ");
-  Serial.print(S2);
+  Serial.print(" HOME: ");
+  Serial.print(HOME);
 
-  Serial.print(" S3: ");
-  Serial.print(S3);
+  Serial.print(" OK: ");
+  Serial.print(OK);
 
-  Serial.print(" S4: ");
-  Serial.print(S4);
+  Serial.print(" RIGHT: ");
+  Serial.print(RIGHT);
 
   Serial.print(" on_off.state: ");
   Serial.print(on_off.state);
