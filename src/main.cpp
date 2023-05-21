@@ -33,12 +33,16 @@ uint8_t OK, prevOK;
 uint8_t RIGHT, prevRIGHT;
 
 // Our finite state machine
-fsm_t on_off, menus, brightness;;
+fsm_t on_off, menus, brightness, cur_price, previsions;
 
-bool wifi_connected = true;
+bool wifi_connected = true, current_price_mode = true, previsions_mode = false;
 char ssid[32] = "eduroam";
-int aux = 1, saved_tariff = 1, battery_level = 99, reminder=0, led_brightness = 50;
-float price_current = 0.0, price_nextday = 0.0, price_nextweek = 0.0, limit_low = 0.0, limit_high = 0.0;
+int aux = 1, saved_tariff = 1, battery_level = 99, reminder=0, led_brightness = 50, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
+int months_31days[7] = {1,3,5,7,8,10,12};
+int months_30days[11] = {1,3,4,5,6,7,8,9,10,11,12};
+int months_all[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
+float price_current = 1.0, limit_low = 0.0, limit_high = 0.0, price_prevision = 1.4;
+
 
 unsigned long interval, last_cycle;
 unsigned long loop_micros;
@@ -103,6 +107,163 @@ void loop()
   on_off.tis = cur_time - on_off.tes;
   menus.tis = cur_time - menus.tes;
   brightness.tis = cur_time - brightness.tes;
+  cur_price.tis = cur_time - cur_price.tes;
+  previsions.tis = cur_time - previsions.tes;
+
+  // Calculate next state for the previsions state machine (dia, mês, ano, hora, minuto)
+  if (previsions.state == 1 && RIGHT && !prevRIGHT)
+  {
+    if(day < 31)
+    {
+      day++;
+    }
+    aux = 1;
+  }
+  else if (previsions.state == 1 && LEFT && !prevLEFT)
+  {
+    if(day > 1)
+    {
+      day--;
+    }
+    aux = 1;
+  }
+  else if (previsions.state == 1 && OK && !prevOK)
+  {
+    if (day == 31)
+    {
+      month = months_31days[0];
+    }
+    else if (day == 30)
+    {
+      month = months_30days[0];
+    }
+    else
+    {
+      month = months_all[0];
+    }
+    j=0;
+    previsions.new_state = 2; // Month
+    aux = 1;
+  }
+  else if (previsions.state == 2 && RIGHT && !prevRIGHT)
+  {
+    if (day == 31 && j < 6)
+    {
+      j++;
+      month = months_31days[j];
+    }
+    else if (day == 30 && j < 11)
+    {
+      j++;
+      month = months_30days[j];
+    }
+    else if (day < 31 && j < 12)
+    {
+      j++;
+      month = months_all[j];
+    }
+    aux = 1;
+  }
+  else if (previsions.state == 2 && LEFT && !prevLEFT)
+  {
+    if (day == 31 && j > 0)
+    {
+      j--;
+      month = months_31days[j];
+    }
+    else if (day == 30 && j > 0)
+    {
+      j--;
+      month = months_30days[j];
+    }
+    else if (day < 31 && j > 0)
+    {
+      j--;
+      month = months_all[j];
+    }
+    aux = 1;
+  }
+  else if (previsions.state == 2 && OK && !prevOK)
+  {
+    previsions.new_state = 3; // Year
+  }
+  else if (previsions.state == 3 && RIGHT && !prevRIGHT)
+  {
+    year++;
+    aux = 1;
+  }
+  else if (previsions.state == 3 && LEFT && !prevLEFT)
+  {
+    year--;
+    aux = 1;
+  }
+  else if (previsions.state == 3 && OK && !prevOK)
+  {
+    previsions.new_state = 4; // Hour
+  }
+  else if (previsions.state == 4 && RIGHT && !prevRIGHT)
+  {
+    if(hour < 23)
+    {
+      hour++;
+    }
+    aux = 1;
+  }
+  else if (previsions.state == 4 && LEFT && !prevLEFT)
+  {
+    if(hour > 0)
+    {
+      hour--;
+    }
+    aux = 1;
+  }
+  else if (previsions.state == 4 && OK && !prevOK)
+  {
+    previsions.new_state = 5; // Minute
+  }
+  else if (previsions.state == 5 && RIGHT && !prevRIGHT)
+  {
+    if(minute < 59)
+    {
+      minute++;
+    }
+    aux = 1;
+  }
+  else if (previsions.state == 5 && LEFT && !prevLEFT)
+  {
+    if(minute > 0)
+    {
+      minute--;
+    }
+    aux = 1;
+  }
+  else if (previsions.state == 5 && OK && !prevOK)
+  {
+    // TODO: Call the function to get the prevision for the specified date and time
+    // price_prevision = get_price_prevision(day, month, year, hour, minute);
+    previsions.new_state = 6; // Show prevision for selected day
+  }
+  else if (previsions.state == 6 && OK && !prevOK)
+  {
+    previsions_mode = true; // Activate prevision mode
+    current_price_mode = false;
+    previsions.new_state = 7; // Confirmation of prevision mode activation
+  }
+  else if (previsions.state == 7 && previsions.tis >= 3000)
+  {
+    previsions.new_state = 0;
+    menus.new_state = reminder;
+    aux = 1;
+  }
+
+
+  // Calculate next state for the cur_price state machine
+  if (cur_price.state == 1 && cur_price.tis >= 3000)
+  {
+    cur_price.new_state = 0;
+    menus.new_state = reminder;
+    aux = 1;
+  }
 
 
   // Calculate next state for the brightness state machine
@@ -136,7 +297,7 @@ void loop()
   }
   else if (menus.state == 2 && RIGHT && !prevRIGHT)
   {
-    menus.new_state = 3;
+    menus.new_state = 3; // Shows current price and enables current price mode on the LEDs if OK is pressed
   }
   else if (menus.state == 2 && LEFT && !prevLEFT)
   {
@@ -145,6 +306,28 @@ void loop()
   else if (menus.state == 2 && OK && !prevOK)
   {
     brightness.new_state = 1; // Activates brightness state machine
+    reminder = menus.state; // Saves the current state to return to it later
+    menus.new_state = 0; // Disables menus state machine (because another one was entered)
+  }
+  else if (menus.state == 3 && OK && !prevOK)
+  {
+    current_price_mode = true;
+    previsions_mode = false;
+    cur_price.new_state = 1; // Activates cur_price state machine
+    reminder = menus.state; // Saves the current state to return to it later
+    menus.new_state = 0; // Disables menus state machine (because another one was entered)
+  }
+  else if (menus.state == 3 && LEFT && !prevLEFT)
+  {
+    menus.new_state = 2; // Shows brightness and enables brightness adjustment if OK is pressed
+  }
+  else if (menus.state == 3 && RIGHT && !prevRIGHT)
+  {
+    menus.new_state = 4; // Allows to configure a prevision for a given day at a given time. To enter configuration panel, OK must be pressed
+  }
+  else if (menus.state == 4 && OK && !prevOK)
+  {
+    previsions.new_state = 1; // Activates previsions state machine
     reminder = menus.state; // Saves the current state to return to it later
     menus.new_state = 0; // Disables menus state machine (because another one was entered)
   }
@@ -167,6 +350,8 @@ void loop()
   set_state(on_off, on_off.new_state);
   set_state(menus, menus.new_state);
   set_state(brightness, brightness.new_state);
+  set_state(cur_price, cur_price.new_state);
+  set_state(previsions, previsions.new_state);
 
   // Update limit_low and limit_high (TODO: get the limit values from the cloud)
   limit_low = 5;
@@ -213,6 +398,31 @@ void loop()
     display.display();
     aux = 0;
   }
+  else if (menus.state == 3 && aux) // Current price screen
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 1);
+    display.print("Current price: ");
+    display.println(price_current);
+    display.setCursor(0, 13);
+    display.println("Press OK to enable   current price mode");
+    display.display();
+    aux = 0;
+  }
+  else if (menus.state == 4 && aux) // Previsions screen
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 1);
+    display.println("Press OK to configurea specific date and  time to observe      previsions");
+    display.display();
+    aux = 0;
+  }
 
   // Actions set by the current state of the brightness state machine
   if (brightness.state == 1 && aux)
@@ -230,6 +440,128 @@ void loop()
     display.display();
     aux = 0;
   }
+
+  // Actions set by the current state of the cur_price state machine
+  if (cur_price.state == 1 && aux) // Confirmation screen
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 1);
+    display.println("Success!!!");
+    display.setCursor(0, 13);
+    display.println("Colours now representthe current price");
+    aux = 0;
+  }
+
+  // Actions set by the current state of the previsions state machine
+  if (previsions.state == 1 && aux) // Select the day (scroll with LEFT and RIGHT)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 1);
+    display.println("Choose the day");
+    display.println("Use L/R and then OK");
+    display.setCursor(0, 20);
+    display.println(day);
+    display.display();
+    aux = 0;
+  }
+  else if (previsions.state == 2 && aux) // Select the month (scroll with LEFT and RIGHT)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 1);
+    display.println("Choose the month");
+    display.println("Use L/R and then OK");
+    display.setCursor(0, 20);
+    display.println(month);
+    display.display();
+    aux = 0;
+  }
+  else if (previsions.state == 3 && aux) // Select the year (scroll with LEFT and RIGHT)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 1);
+    display.println("Choose the year");
+    display.println("Use L/R and then OK");
+    display.setCursor(0, 20);
+    display.println(year);
+    display.display();
+    aux = 0;
+  }
+  else if (previsions.state == 4 && aux) // Select the hour (scroll with LEFT and RIGHT)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 1);
+    display.println("Choose the hour");
+    display.println("Use L/R and then OK");
+    display.setCursor(0, 20);
+    display.println(hour);
+    display.display();
+    aux = 0;
+  }
+  else if (previsions.state == 5 && aux) // Select the minute (scroll with LEFT and RIGHT)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 1);
+    display.println("Choose the minute");
+    display.println("Use L/R and then OK");
+    display.setCursor(0, 20);
+    display.println(minute);
+    display.display();
+    aux = 0;
+  }
+  else if (previsions.state == 6 && aux) // Display the prevision for the specified date and time
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 0);
+    display.print("Prevision at");
+    display.print(" ");
+    display.print(hour);
+    display.print(":");
+    display.println(minute);
+    display.print(day);
+    display.print("/");
+    display.print(month);
+    display.print("/");
+    display.print(year);
+    display.print(": ");
+    display.println(price_prevision);
+    display.println("Press OK to track    this price");
+    display.display();
+    aux = 0;
+  }
+  else if (previsions.state == 7 && aux)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 0);
+    display.println("Success!!!");
+    display.println("Colours will now     represent the trackedprice");
+    display.display();
+    aux = 0;
+  }
+  
 
 
 
@@ -254,6 +586,12 @@ void loop()
 
   Serial.print(" brightness.state: ");
   Serial.print(brightness.state);
+
+  Serial.print(" cur_price.state: ");
+  Serial.print(cur_price.state);
+
+  Serial.print(" previsions.state: ");
+  Serial.print(previsions.state);
 
   Serial.print(" loop: ");
   Serial.println(micros() - loop_micros);
