@@ -18,6 +18,11 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &CustomI2C0, -1);
 #define PIN_BUTTON_OK 14
 #define PIN_BUTTON_RIGHT 15
 
+#define N_COLORS 6
+
+char colors[N_COLORS][10] = {"red", "green", "blue", "yellow", "orange", "white"};
+int colour_index = 0;
+
 typedef struct {
   int state, new_state;
 
@@ -33,9 +38,9 @@ uint8_t OK, prevOK;
 uint8_t RIGHT, prevRIGHT;
 
 // Our finite state machine
-fsm_t on_off, menus, brightness, cur_price, previsions;
+fsm_t on_off, menus, brightness, cur_price, previsions, set_colour;
 
-bool wifi_connected = true, current_price_mode = true, previsions_mode = false;
+bool wifi_connected = true, current_price_mode = true, previsions_mode = false, set_colour_mode = false;
 char ssid[32] = "eduroam";
 int aux = 1, saved_tariff = 1, battery_level = 99, reminder=0, led_brightness = 50, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
 int months_31days[7] = {1,3,5,7,8,10,12};
@@ -109,6 +114,39 @@ void loop()
   brightness.tis = cur_time - brightness.tes;
   cur_price.tis = cur_time - cur_price.tes;
   previsions.tis = cur_time - previsions.tes;
+  set_colour.tis = cur_time - set_colour.tes;
+
+  // Calculate next state for the set_colour state machine (red, green, blue, yellow, orange, white)
+  if (set_colour.state == 1 && RIGHT && !prevRIGHT)
+  {
+    if(colour_index < N_COLORS-1)
+    {
+      colour_index++;
+    }
+    aux = 1;
+  }
+  else if (set_colour.state == 1 && LEFT && !prevLEFT)
+  {
+    if(colour_index > 0)
+    {
+      colour_index--;
+    }
+    aux = 1;
+  }
+  else if (set_colour.state == 1 && OK && !prevOK)
+  {
+    set_colour_mode = true;
+    previsions_mode = false;
+    current_price_mode = false;
+    set_colour.new_state = 2; // Confirmation screen
+    aux = 1;
+  }
+  else if (set_colour.state == 2 && set_colour.tis > 3000)
+  {
+    set_colour.new_state = 0; // Back to main menu
+    menus.new_state = reminder;
+    aux = 1;
+  }
 
   // Calculate next state for the previsions state machine (dia, mês, ano, hora, minuto)
   if (previsions.state == 1 && RIGHT && !prevRIGHT)
@@ -247,6 +285,7 @@ void loop()
   {
     previsions_mode = true; // Activate prevision mode
     current_price_mode = false;
+    set_colour_mode = false;
     previsions.new_state = 7; // Confirmation of prevision mode activation
   }
   else if (previsions.state == 7 && previsions.tis >= 3000)
@@ -313,6 +352,7 @@ void loop()
   {
     current_price_mode = true;
     previsions_mode = false;
+    set_colour_mode = false;
     cur_price.new_state = 1; // Activates cur_price state machine
     reminder = menus.state; // Saves the current state to return to it later
     menus.new_state = 0; // Disables menus state machine (because another one was entered)
@@ -330,6 +370,28 @@ void loop()
     previsions.new_state = 1; // Activates previsions state machine
     reminder = menus.state; // Saves the current state to return to it later
     menus.new_state = 0; // Disables menus state machine (because another one was entered)
+  }
+  else if (menus.state == 4 && LEFT && !prevLEFT)
+  {
+    menus.new_state = 3; // Shows current price and enables current price mode on the LEDs if OK is pressed
+  }
+  else if (menus.state == 4 && RIGHT && !prevRIGHT)
+  {
+    menus.new_state = 5; // Allows to set a specific colour for the LEDs if OK is pressed
+  }
+  else if (menus.state == 5 && OK && !prevOK)
+  {
+    set_colour.new_state = 1; // Activates set_colour state machine
+    reminder = menus.state; // Saves the current state to return to it later
+    menus.new_state = 0; // Disables menus state machine (because another one was entered)
+  }
+  else if (menus.state == 5 && LEFT && !prevLEFT)
+  {
+    menus.new_state = 4; // Allows to configure a prevision for a given day at a given time. To enter configuration panel, OK must be pressed
+  }
+  else if (menus.state == 5 && RIGHT && !prevRIGHT)
+  {
+    menus.new_state = 6;
   }
 
   // ON_OFF FSM
@@ -352,6 +414,7 @@ void loop()
   set_state(brightness, brightness.new_state);
   set_state(cur_price, cur_price.new_state);
   set_state(previsions, previsions.new_state);
+  set_state(set_colour, set_colour.new_state);
 
   // Update limit_low and limit_high (TODO: get the limit values from the cloud)
   limit_low = 5;
@@ -422,6 +485,34 @@ void loop()
     display.println("Press OK to configurea specific date and  time to observe      previsions");
     display.display();
     aux = 0;
+  }
+  else if (menus.state == 5 && aux) // Set colour main screen
+  {
+    if(set_colour_mode)
+    {
+      display.clearDisplay();
+      display.setTextColor(WHITE);
+      display.setTextSize(1);
+      display.setFont(NULL);
+      display.setCursor(0, 1);
+      display.println("Set colour mode is   activated!");
+      display.setCursor(0, 20);
+      display.print("Colour: ");
+      display.println(colors[colour_index]);
+      display.display();
+      aux = 0;
+    }
+    else
+    {
+      display.clearDisplay();
+      display.setTextColor(WHITE);
+      display.setTextSize(1);
+      display.setFont(NULL);
+      display.setCursor(0, 4);
+      display.println("Press OK to select a colour for the LED's to display");
+      display.display();
+      aux = 0;
+    }
   }
 
   // Actions set by the current state of the brightness state machine
@@ -561,6 +652,32 @@ void loop()
     display.display();
     aux = 0;
   }
+
+  // Actions set by the current state of the set_colour state machine
+  if (set_colour.state == 1 && aux) // Display the selected colour
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 1);
+    display.println("Select a color using L/R and OK");
+    display.setCursor(0, 21);
+    display.print("Set colour: ");
+    display.println(colors[colour_index]);
+    display.display();
+  }
+  else if (set_colour.state == 2 && aux) // Confirmation screen
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 9);
+    display.println("Colour now set to");
+    display.println(colors[colour_index]);
+    display.display();
+  }
   
 
 
@@ -592,6 +709,9 @@ void loop()
 
   Serial.print(" previsions.state: ");
   Serial.print(previsions.state);
+
+  Serial.print(" set_colour.state: ");
+  Serial.print(set_colour.state);
 
   Serial.print(" loop: ");
   Serial.println(micros() - loop_micros);
