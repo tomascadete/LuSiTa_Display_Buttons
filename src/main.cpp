@@ -20,9 +20,6 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &CustomI2C0, -1);
 
 #define N_COLORS 6
 
-char colors[N_COLORS][10] = {"red", "green", "blue", "yellow", "orange", "white"};
-int colour_index = 0;
-
 typedef struct {
   int state, new_state;
 
@@ -38,7 +35,7 @@ uint8_t OK, prevOK;
 uint8_t RIGHT, prevRIGHT;
 
 // Our finite state machine
-fsm_t on_off, menus, brightness, cur_price, previsions, set_colour;
+fsm_t on_off, menus, brightness, cur_price, previsions, set_colour, set_treshold;
 
 bool wifi_connected = true, current_price_mode = true, previsions_mode = false, set_colour_mode = false;
 char ssid[32] = "eduroam";
@@ -47,6 +44,14 @@ int months_31days[7] = {1,3,5,7,8,10,12};
 int months_30days[11] = {1,3,4,5,6,7,8,9,10,11,12};
 int months_all[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
 float price_current = 1.0, limit_low = 0.0, limit_high = 0.0, price_prevision = 1.4;
+char colors[N_COLORS][10] = {"red", "green", "blue", "yellow", "orange", "white"};
+int colour_index = 0;
+
+// Treshold_1 is when the light changes from green to greenish yellow
+// Treshold_2 is when the light changes from greenish yellow to yellow
+// Treshold_3 is when the light changes from yellow to orange
+// Treshold_4 is when the light changes from orange to red
+float treshold_1 = 3.00, treshold_2 = 5.00, treshold_3 = 7.00, treshold_4 = 10.00;
 
 
 unsigned long interval, last_cycle;
@@ -115,6 +120,94 @@ void loop()
   cur_price.tis = cur_time - cur_price.tes;
   previsions.tis = cur_time - previsions.tes;
   set_colour.tis = cur_time - set_colour.tes;
+  set_treshold.tis = cur_time - set_treshold.tes;
+
+  // Calculate next state for the set_treshold state machine
+  if (set_treshold.state == 1 && RIGHT && !prevRIGHT) // treshold 1 selection
+  {
+    if(treshold_1 < treshold_2 - 0.05)
+    {
+      treshold_1 += 0.05;
+    }
+    aux = 1;
+  }
+  else if (set_treshold.state == 1 && LEFT && !prevLEFT)
+  {
+    if (treshold_1 > 0.05)
+    {
+      treshold_1 -= 0.05;
+    }
+    aux = 1;
+  }
+  else if (set_treshold.state == 1 && OK && !prevOK)
+  {
+    set_treshold.new_state = 2; // treshold 2 selection
+  }
+  else if (set_treshold.state == 2 && RIGHT && !prevRIGHT) // treshold 2 selection
+  {
+    if (treshold_2 < treshold_3 - 0.05)
+    {
+      treshold_2 += 0.05;
+    }
+    aux = 1;
+  }
+  else if (set_treshold.state == 2 && LEFT && !prevLEFT)
+  {
+    if (treshold_2 > treshold_1 + 0.05)
+    {
+      treshold_2 -= 0.05;
+    }
+    aux = 1;
+  }
+  else if (set_treshold.state == 2 && OK && !prevOK)
+  {
+    set_treshold.new_state = 3; // treshold 3 selection
+  }
+  else if (set_treshold.state == 3 && RIGHT && !prevRIGHT) // treshold 3 selection
+  {
+    if (treshold_3 < treshold_4 - 0.05)
+    {
+      treshold_3 += 0.05;
+    }
+    aux = 1;
+  }
+  else if (set_treshold.state == 3 && LEFT && !prevLEFT)
+  {
+    if (treshold_3 > treshold_2 + 0.05)
+    {
+      treshold_3 -= 0.05;
+    }
+    aux = 1;
+  }
+  else if (set_treshold.state == 3 && OK && !prevOK)
+  {
+    set_treshold.new_state = 4; // treshold 4 selection
+  }
+  else if (set_treshold.state == 4 && RIGHT && !prevRIGHT) // treshold 4 selection
+  {
+    treshold_4 += 0.05;
+    aux = 1;
+  }
+  else if (set_treshold.state == 4 && LEFT && !prevLEFT)
+  {
+    if (treshold_4 > treshold_3 + 0.05)
+    {
+      treshold_4 -= 0.05;
+    }
+    aux = 1;
+  }
+  else if (set_treshold.state == 4 && OK && !prevOK)
+  {
+    set_treshold.new_state = 5; // Confirmation screen
+  }
+  else if (set_treshold.state == 5 && set_treshold.tis > 3000)
+  {
+    set_treshold.new_state = 0; // Back to main menu
+    menus.new_state = reminder;
+    aux = 1;
+  }
+  
+
 
   // Calculate next state for the set_colour state machine (red, green, blue, yellow, orange, white)
   if (set_colour.state == 1 && RIGHT && !prevRIGHT)
@@ -185,19 +278,18 @@ void loop()
   }
   else if (previsions.state == 2 && RIGHT && !prevRIGHT)
   {
-    if (day == 31 && j < 6)
+    if (day == 31 && j < 6-1)
     {
       j++;
       month = months_31days[j];
     }
-    else if (day == 30 && j < 11)
+    else if (day == 30 && j < 11-1)
     {
-      j++;
+
       month = months_30days[j];
     }
-    else if (day < 31 && j < 12)
+    else if (day < 31 && j < 12-1)
     {
-      j++;
       month = months_all[j];
     }
     aux = 1;
@@ -306,7 +398,7 @@ void loop()
 
 
   // Calculate next state for the brightness state machine
-  if(brightness.state == 1 && RIGHT && !prevLEFT)
+  if(brightness.state == 1 && RIGHT && !prevRIGHT)
   {
     if(led_brightness < 100)
     {
@@ -391,8 +483,32 @@ void loop()
   }
   else if (menus.state == 5 && RIGHT && !prevRIGHT)
   {
-    menus.new_state = 6;
+    menus.new_state = 6; // Displays the Wi-Fi state
   }
+  else if (menus.state == 6 && LEFT && !prevLEFT)
+  {
+    menus.new_state = 5; // Allows to set a specific colour for the LEDs if OK is pressed
+  }
+  else if (menus.state == 6 && RIGHT && !prevRIGHT)
+  {
+    menus.new_state = 7; // Allows to set the colour change tresholds for the LEDs if OK is pressed
+  }
+  else if (menus.state == 7 && OK && !prevOK)
+  {
+    set_treshold.new_state = 1; // Activates set_tresholds state machine
+    reminder = menus.state; // Saves the current state to return to it later
+    menus.new_state = 0; // Disables menus state machine (because another one was entered)
+  }
+  else if (menus.state == 7 && RIGHT && !prevRIGHT)
+  {
+    menus.new_state = 1; // Home screen displays the battery level
+  }
+  else if (menus.state == 7 && LEFT && !prevLEFT)
+  {
+    menus.new_state = 6; // Displays the Wi-Fi state
+  }
+
+
 
   // ON_OFF FSM
   // Calculate next state for the on_off state machine
@@ -415,6 +531,7 @@ void loop()
   set_state(cur_price, cur_price.new_state);
   set_state(previsions, previsions.new_state);
   set_state(set_colour, set_colour.new_state);
+  set_state(set_treshold, set_treshold.new_state);
 
   // Update limit_low and limit_high (TODO: get the limit values from the cloud)
   limit_low = 5;
@@ -514,6 +631,45 @@ void loop()
       aux = 0;
     }
   }
+  else if (menus.state == 6 && aux) // Display Wi-Fi state
+  {
+    if(wifi_connected)
+    {
+      display.clearDisplay();
+      display.setTextColor(WHITE);
+      display.setTextSize(1);
+      display.setFont(NULL);
+      display.setCursor(0, 9);
+      display.println("Connected to Wi-Fi!");
+      display.print("SSID: ");
+      display.println(ssid);
+      display.display();
+      aux = 0;
+    }
+    else
+    {
+      display.clearDisplay();
+      display.setTextColor(WHITE);
+      display.setTextSize(1);
+      display.setFont(NULL);
+      display.setCursor(0, 4);
+      display.println("No Wi-Fi connection");
+      display.println("Please configure in  the browser");
+      display.display();
+      aux =0;
+    }
+  }
+  else if (menus.state == 7 && aux) // Allows colour treshold configuration if OK is pressed
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 4);
+    display.println("Press OK to configurethe colour change    price tresholds");
+    display.display();
+    aux = 0;
+  }
 
   // Actions set by the current state of the brightness state machine
   if (brightness.state == 1 && aux)
@@ -543,6 +699,7 @@ void loop()
     display.println("Success!!!");
     display.setCursor(0, 13);
     display.println("Colours now representthe current price");
+    display.display();
     aux = 0;
   }
 
@@ -666,6 +823,7 @@ void loop()
     display.print("Set colour: ");
     display.println(colors[colour_index]);
     display.display();
+    aux = 0;
   }
   else if (set_colour.state == 2 && aux) // Confirmation screen
   {
@@ -677,9 +835,85 @@ void loop()
     display.println("Colour now set to");
     display.println(colors[colour_index]);
     display.display();
+    aux = 0;
   }
   
-
+  // Actions set by the current state of the set_treshold state machine
+  if (set_treshold.state == 1 && aux) // Display the currently selected treshold_1 (OK to confirm)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 4);
+    display.println("Green -> Gree/Yellow");
+    display.println("Use L/R and OK");
+    display.print("Treshold 1: ");
+    display.print(treshold_1);
+    display.display();
+    aux = 0;
+  }
+  else if (set_treshold.state == 2 && aux) // Display the currently selected treshold_2 (OK to confirm)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 4);
+    display.println("Green/Yellow->Yellow");
+    display.println("Use L/R and OK");
+    display.print("Treshold 2: ");
+    display.print(treshold_2);
+    display.display();
+    aux = 0;
+  }
+  else if (set_treshold.state == 3 && aux) // Display the currently selected treshold_3 (OK to confirm)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 4);
+    display.println("Yellow -> Orange");
+    display.println("Use L/R and OK");
+    display.print("Treshold 3: ");
+    display.print(treshold_3);
+    display.display();
+    aux = 0;
+  }
+  else if (set_treshold.state == 4 && aux) // Display the currently selected treshold_4 (OK to confirm)
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 4);
+    display.println("Orange -> Red");
+    display.println("Use L/R and OK");
+    display.print("Treshold 4: ");
+    display.print(treshold_4);
+    display.display();
+    aux = 0;
+  }
+  else if (set_treshold.state == 5 && aux) // Confirmation screen
+  {
+    display.clearDisplay();
+    display.setTextColor(WHITE);
+    display.setTextSize(1);
+    display.setFont(NULL);
+    display.setCursor(0, 2);
+    display.println("Set tresholds:");
+    display.setCursor(0, 14);
+    display.print(treshold_1);
+    display.print("/");
+    display.print(treshold_2);
+    display.print("/");
+    display.print(treshold_3);
+    display.print("/");
+    display.print(treshold_4);
+    display.display();
+    aux = 0;
+  }
 
 
   // Debug using the serial port
@@ -712,6 +946,9 @@ void loop()
 
   Serial.print(" set_colour.state: ");
   Serial.print(set_colour.state);
+
+  Serial.print(" set_treshold.state: ");
+  Serial.print(set_treshold.state);
 
   Serial.print(" loop: ");
   Serial.println(micros() - loop_micros);
