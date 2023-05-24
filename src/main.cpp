@@ -39,11 +39,11 @@ fsm_t on_off, menus, brightness, cur_price, previsions, set_colour, set_treshold
 
 bool wifi_connected = true, current_price_mode = true, previsions_mode = false, set_colour_mode = false;
 char ssid[32] = "eduroam";
-int aux = 1, saved_tariff = 1, battery_level = 99, reminder=0, led_brightness = 50, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
+int aux = 1, battery_level = 99, reminder=0, led_brightness = 50, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
 int months_31days[7] = {1,3,5,7,8,10,12};
 int months_30days[11] = {1,3,4,5,6,7,8,9,10,11,12};
 int months_all[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
-float price_current = 1.0, limit_low = 0.0, limit_high = 0.0, price_prevision = 1.4;
+float price_current = 1.0, price_prevision = 1.4;
 char colors[N_COLORS][10] = {"red", "green", "blue", "yellow", "orange", "white"};
 int colour_index = 0;
 
@@ -51,7 +51,7 @@ int colour_index = 0;
 // Treshold_2 is when the light changes from greenish yellow to yellow
 // Treshold_3 is when the light changes from yellow to orange
 // Treshold_4 is when the light changes from orange to red
-float treshold_1 = 3.00, treshold_2 = 5.00, treshold_3 = 7.00, treshold_4 = 10.00;
+float treshold_1 = 0.40, treshold_2 = 0.75, treshold_3 = 1.10, treshold_4 = 1.50;
 
 
 unsigned long interval, last_cycle;
@@ -426,6 +426,10 @@ void loop()
   {
     menus.new_state = 2; // Shows brightness and enables brightness adjustment if OK is pressed
   }
+  else if (menus.state == 1 && LEFT && !prevLEFT)
+  {
+    menus.new_state = 7; // Allows to set the colour change tresholds for the LEDs if OK is pressed
+  }
   else if (menus.state == 2 && RIGHT && !prevRIGHT)
   {
     menus.new_state = 3; // Shows current price and enables current price mode on the LEDs if OK is pressed
@@ -532,10 +536,6 @@ void loop()
   set_state(previsions, previsions.new_state);
   set_state(set_colour, set_colour.new_state);
   set_state(set_treshold, set_treshold.new_state);
-
-  // Update limit_low and limit_high (TODO: get the limit values from the cloud)
-  limit_low = 5;
-  limit_high = 10;
 
   // Update battery level (TODO: implement a way to get the battery level)
   battery_level = 100;
