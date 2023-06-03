@@ -4,10 +4,22 @@
 #include "Adafruit_GFX.h"
 #include "Adafruit_SSD1306.h"
 #include "Adafruit_I2CDevice.h"
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+  #include <avr/power.h>
+#endif
+#include "led_handle.h"
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 
+#define LED_PIN 1        // Data pin for the LED strip
+#define LED_COUNT 115    // Number of LEDs in the strip
+
+// Declare our NeoPixel strip object:
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+// Declare our I2C device (display)
 TwoWire CustomI2C0(16, 17); // SDA, SCL
 
 // Initialize the SSD1306 display
@@ -35,11 +47,12 @@ uint8_t OK, prevOK;
 uint8_t RIGHT, prevRIGHT;
 
 // Our finite state machine
-fsm_t on_off, menus, brightness, cur_price, previsions, set_colour, set_treshold;
+fsm_t on_off, led_control, menus, brightness, cur_price, previsions, set_colour, set_treshold;
 
 bool wifi_connected = true, current_price_mode = true, previsions_mode = false, set_colour_mode = false;
 char ssid[32] = "eduroam";
-int aux = 1, battery_level = 99, reminder=0, led_brightness = 50, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
+char password[32] = "password";
+int aux = 1, battery_level = 99, reminder=0, led_brightness = 60, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
 int months_31days[7] = {1,3,5,7,8,10,12};
 int months_30days[11] = {1,3,4,5,6,7,8,9,10,11,12};
 int months_all[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
@@ -52,6 +65,15 @@ int colour_index = 0;
 // Treshold_3 is when the light changes from yellow to orange
 // Treshold_4 is when the light changes from orange to red
 float treshold_1 = 0.40, treshold_2 = 0.75, treshold_3 = 1.10, treshold_4 = 1.50;
+
+// Define the colours to be utilized
+uint32_t GREEN = strip.Color(0, 255, 0);
+uint32_t GREENISH_YELLOW = strip.Color(154, 205, 50);
+uint32_t YELLOW = strip.Color(255, 255, 0);
+uint32_t ORANGE = strip.Color(255, 165, 0);
+uint32_t RED = strip.Color(255, 0, 0);
+uint32_t wHiTe = strip.Color(255, 255, 255); // Easter EGG
+uint32_t BLUE = strip.Color(0, 0, 255);
 
 
 unsigned long interval, last_cycle;
@@ -70,14 +92,14 @@ void set_state(fsm_t& fsm, int new_state)
 
 void setup()
 {
-  // put your setup code here, to run once:
-  // Initialize serial and wait for port to open:
   Serial.begin(9600);
   pinMode(PIN_BUTTON_LEFT, INPUT_PULLUP);
   pinMode(PIN_BUTTON_HOME, INPUT_PULLUP);
   pinMode(PIN_BUTTON_OK, INPUT_PULLUP);
   pinMode(PIN_BUTTON_RIGHT, INPUT_PULLUP);
 
+  strip.begin();
+  strip.show();  // Turns of the LEDs completely
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) // 3D
@@ -86,6 +108,8 @@ void setup()
     for(;;); // Don't proceed, loop forever
   }
 
+  strip.setBrightness(led_brightness);
+  ledInit(strip);
 }
 
 void loop()
@@ -115,6 +139,7 @@ void loop()
   // Update tis for all state machines
   unsigned long cur_time = millis();   // Just one call to millis()
   on_off.tis = cur_time - on_off.tes;
+  led_control.tis = cur_time - led_control.tes;
   menus.tis = cur_time - menus.tes;
   brightness.tis = cur_time - brightness.tes;
   cur_price.tis = cur_time - cur_price.tes;
@@ -285,11 +310,12 @@ void loop()
     }
     else if (day == 30 && j < 11-1)
     {
-
+      j++;
       month = months_30days[j];
     }
-    else if (day < 31 && j < 12-1)
+    else if (day < 30 && j < 12-1)
     {
+      j++;
       month = months_all[j];
     }
     aux = 1;
@@ -306,7 +332,7 @@ void loop()
       j--;
       month = months_30days[j];
     }
-    else if (day < 31 && j > 0)
+    else if (day < 30 && j > 0)
     {
       j--;
       month = months_all[j];
@@ -400,17 +426,19 @@ void loop()
   // Calculate next state for the brightness state machine
   if(brightness.state == 1 && RIGHT && !prevRIGHT)
   {
-    if(led_brightness < 100)
+    if(led_brightness < 240)
     {
-      led_brightness += 10;
+      led_brightness += 20;
+      strip.setBrightness(led_brightness);
     }
     aux = 1;
   }
   else if(brightness.state == 1 && LEFT && !prevLEFT)
   {
-    if(led_brightness > 10)
+    if(led_brightness >= 20)
     {
-      led_brightness -= 10;
+      led_brightness -= 20;
+      strip.setBrightness(led_brightness);
     }
     aux = 1;
   }
@@ -512,8 +540,6 @@ void loop()
     menus.new_state = 6; // Displays the Wi-Fi state
   }
 
-
-
   // ON_OFF FSM
   // Calculate next state for the on_off state machine
   if (on_off.state == 0 && HOME && !prevHOME)
@@ -528,8 +554,25 @@ void loop()
     aux = 1;
   }
 
+  // LED_CONTROL FSM
+  // Calculate next state for the led_control state machine
+  if(current_price_mode && led_control.state!=1)
+  {
+    led_control.new_state = 1; // Current price mode
+  }
+  else if(previsions_mode && led_control.state!=2)
+  {
+    led_control.new_state = 2; // Previsions mode
+  }
+  else if(set_colour_mode && led_control.state!=3)
+  {
+    led_control.new_state = 3; // Set colour mode
+  }
+  
+
   // Update the states
   set_state(on_off, on_off.new_state);
+  set_state(led_control, led_control.new_state);
   set_state(menus, menus.new_state);
   set_state(brightness, brightness.new_state);
   set_state(cur_price, cur_price.new_state);
@@ -915,6 +958,80 @@ void loop()
     aux = 0;
   }
 
+  // Actions set by the current state of the led_control state machine
+  if (led_control.state == 1)
+  {
+    if(price_current < treshold_1)
+    {
+      setColor(strip, GREEN);
+    }
+    else if(price_current >= treshold_1 && price_current < treshold_2)
+    {
+      setColor(strip, GREENISH_YELLOW);
+    }
+    else if(price_current >= treshold_2 && price_current < treshold_3)
+    {
+      setColor(strip, YELLOW);
+    }
+    else if(price_current >= treshold_3 && price_current < treshold_4)
+    {
+      setColor(strip, ORANGE);
+    }
+    else if(price_current >= treshold_4)
+    {
+      setColor(strip, RED);
+    }
+  }
+  else if (led_control.state == 2)
+  {
+    if(price_prevision < treshold_1)
+    {
+      setColor(strip, GREEN);
+    }
+    else if(price_prevision >= treshold_1 && price_prevision < treshold_2)
+    {
+      setColor(strip, GREENISH_YELLOW);
+    }
+    else if(price_prevision >= treshold_2 && price_prevision < treshold_3)
+    {
+      setColor(strip, YELLOW);
+    }
+    else if(price_prevision >= treshold_3 && price_prevision < treshold_4)
+    {
+      setColor(strip, ORANGE);
+    }
+    else if(price_prevision >= treshold_4)
+    {
+      setColor(strip, RED);
+    }
+  }
+  else if (led_control.state == 3)
+  {
+    if (colour_index == 0) // RED
+    {
+      setColor(strip, RED);
+    }
+    else if (colour_index == 1) // GREEN
+    {
+      setColor(strip, GREEN);
+    }
+    else if (colour_index == 2) // BLUE
+    {
+      setColor(strip, BLUE);
+    }
+    else if (colour_index == 3) // YELLOW
+    {
+      setColor(strip, YELLOW);
+    }
+    else if (colour_index == 4) // ORANGE
+    {
+      setColor(strip, ORANGE);
+    }
+    else if (colour_index == 5) // WHITE
+    {
+      setColor(strip, WHITE);
+    }
+  }
 
   // Debug using the serial port
   Serial.print("LEFT: ");
@@ -928,6 +1045,9 @@ void loop()
 
   Serial.print(" OK: ");
   Serial.print(OK);
+
+  Serial.print(" led_control.state: ");
+  Serial.print(led_control.state);
 
   Serial.print(" on_off.state: ");
   Serial.print(on_off.state);
