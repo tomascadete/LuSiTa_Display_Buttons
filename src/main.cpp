@@ -5,19 +5,19 @@
 #include "Adafruit_SSD1306.h"
 #include "Adafruit_I2CDevice.h"
 #include <Adafruit_NeoPixel.h>
-#ifdef __AVR__
-  #include <avr/power.h>
-#endif
-#include "led_handle.h"
+// #ifdef __AVR__
+//   #include <avr/power.h>
+// #endif
+// #include "led_handle.h"
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 
-#define LED_PIN 1        // Data pin for the LED strip
+#define LEDS_PIN 1        // Data pin for the LED strip
 #define LED_COUNT 115    // Number of LEDs in the strip
 
 // Declare our NeoPixel strip object:
-// Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel leds(LED_COUNT, LEDS_PIN, NEO_GRB + NEO_KHZ800);
 
 // Declare our I2C device (display)
 TwoWire CustomI2C0(16, 17); // SDA, SCL
@@ -52,11 +52,11 @@ fsm_t on_off, led_control, menus, brightness, cur_price, previsions, set_colour,
 bool wifi_connected = true, current_price_mode = true, previsions_mode = false, set_colour_mode = false;
 char ssid[32] = "eduroam";
 char password[32] = "password";
-int aux = 1, auxLED = 0, battery_level = 99, reminder=0, led_brightness = 60, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
+int aux = 1, auxLED = 1, battery_level = 99, reminder=0, led_brightness = 60, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
 int months_31days[7] = {1,3,5,7,8,10,12};
 int months_30days[11] = {1,3,4,5,6,7,8,9,10,11,12};
 int months_all[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
-float price_current = 1.0, price_prevision = 1.4;
+float price_current = 1.6, price_prevision = 1.4;
 char colors[N_COLORS][10] = {"red", "green", "blue", "yellow", "orange", "white"};
 int colour_index = 0;
 
@@ -65,16 +65,6 @@ int colour_index = 0;
 // Treshold_3 is when the light changes from yellow to orange
 // Treshold_4 is when the light changes from orange to red
 float treshold_1 = 0.40, treshold_2 = 0.75, treshold_3 = 1.10, treshold_4 = 1.50;
-
-// Define the colours to be utilized
-// uint32_t GREEN = strip.Color(0, 255, 0);
-// uint32_t GREENISH_YELLOW = strip.Color(154, 205, 50);
-// uint32_t YELLOW = strip.Color(255, 255, 0);
-// uint32_t ORANGE = strip.Color(255, 165, 0);
-// uint32_t RED = strip.Color(255, 0, 0);
-// uint32_t wHiTe = strip.Color(255, 255, 255); // Easter EGG
-// uint32_t BLUE = strip.Color(0, 0, 255);
-
 
 unsigned long interval, last_cycle;
 unsigned long loop_micros;
@@ -99,8 +89,7 @@ void setup()
   pinMode(PIN_BUTTON_OK, INPUT_PULLUP);
   pinMode(PIN_BUTTON_RIGHT, INPUT_PULLUP);
 
-  // strip.begin();
-  // strip.show();  // Turns of the LEDs completely
+  leds.begin();  // Call this to start up the LED strip.
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) // 3D
@@ -109,8 +98,8 @@ void setup()
     for(;;); // Don't proceed, loop forever
   }
 
-  // strip.setBrightness(led_brightness);
-  // ledInit(strip);
+  leds.setBrightness(led_brightness);
+  leds.show();
 }
 
 void loop()
@@ -434,7 +423,7 @@ void loop()
     if(led_brightness < 240)
     {
       led_brightness += 20;
-      // strip.setBrightness(led_brightness);
+      // leds.setBrightness(led_brightness);
     }
     aux = 1;
   }
@@ -443,7 +432,7 @@ void loop()
     if(led_brightness >= 20)
     {
       led_brightness -= 20;
-      // strip.setBrightness(led_brightness);
+      // leds.setBrightness(led_brightness);
     }
     aux = 1;
   }
@@ -967,60 +956,89 @@ void loop()
   }
 
   // Actions set by the current state of the led_control state machine
-  /*
   if (led_control.state == 1 && auxLED)
   {
-    if(price_current < treshold_1)
+    if(price_current < treshold_1) // Green
     {
-      setColor(strip, GREEN);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(0, 255, 0)); 
+      }
       auxLED = 0;
     }
-    else if(price_current >= treshold_1 && price_current < treshold_2)
+    else if(price_current >= treshold_1 && price_current < treshold_2) // Greenish Yellow
     {
-      setColor(strip, GREENISH_YELLOW);
+      for(int i = 0; i < LED_COUNT; i++) 
+      {
+        leds.setPixelColor(i, leds.Color(154, 205, 50)); 
+      }
       auxLED = 0;
     }
-    else if(price_current >= treshold_2 && price_current < treshold_3)
+    else if(price_current >= treshold_2 && price_current < treshold_3) // Yellow
     {
-      setColor(strip, YELLOW);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 255, 0));
+      }
       auxLED = 0;
     }
-    else if(price_current >= treshold_3 && price_current < treshold_4)
+    else if(price_current >= treshold_3 && price_current < treshold_4) // Orange
     {
-      setColor(strip, ORANGE);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 165, 0));
+      }
       auxLED = 0;
     }
-    else if(price_current >= treshold_4)
+    else if(price_current >= treshold_4) // RED
     {
-      setColor(strip, RED);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 0, 0));
+      }
       auxLED = 0;
     }
   }
   else if (led_control.state == 2 && auxLED)
   {
-    if(price_prevision < treshold_1)
+    if(price_prevision < treshold_1) // Green
     {
-      setColor(strip, GREEN);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(0, 255, 0)); 
+      }
       auxLED = 0;
     }
-    else if(price_prevision >= treshold_1 && price_prevision < treshold_2)
+    else if(price_prevision >= treshold_1 && price_prevision < treshold_2)  // Greenish Yellow
     {
-      setColor(strip, GREENISH_YELLOW);
+      for(int i = 0; i < LED_COUNT; i++) 
+      {
+        leds.setPixelColor(i, leds.Color(154, 205, 50)); 
+      }
       auxLED = 0;
     }
-    else if(price_prevision >= treshold_2 && price_prevision < treshold_3)
+    else if(price_prevision >= treshold_2 && price_prevision < treshold_3) // Yellow
     {
-      setColor(strip, YELLOW);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 255, 0));
+      }
       auxLED = 0;
     }
-    else if(price_prevision >= treshold_3 && price_prevision < treshold_4)
+    else if(price_prevision >= treshold_3 && price_prevision < treshold_4) // Orange
     {
-      setColor(strip, ORANGE);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 165, 0));
+      }
       auxLED = 0;
     }
-    else if(price_prevision >= treshold_4)
+    else if(price_prevision >= treshold_4) // Red
     {
-      setColor(strip, RED);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 0, 0));
+      }
       auxLED = 0;
     }
   }
@@ -1028,36 +1046,54 @@ void loop()
   {
     if (colour_index == 0) // RED
     {
-      setColor(strip, RED);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 0, 0));
+      }
       auxLED = 0;
     }
     else if (colour_index == 1) // GREEN
     {
-      setColor(strip, GREEN);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(0, 255, 0));
+      }
       auxLED = 0;
     }
     else if (colour_index == 2) // BLUE
     {
-      setColor(strip, BLUE);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(0, 0, 255));
+      }
       auxLED = 0;
     }
     else if (colour_index == 3) // YELLOW
     {
-      setColor(strip, YELLOW);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 255, 0));
+      }
       auxLED = 0;
     }
     else if (colour_index == 4) // ORANGE
     {
-      setColor(strip, ORANGE);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 165, 0));
+      }
       auxLED = 0;
     }
     else if (colour_index == 5) // WHITE
     {
-      setColor(strip, WHITE);
+      for(int i = 0; i < LED_COUNT; i++)
+      {
+        leds.setPixelColor(i, leds.Color(255, 255, 255));
+      }
       auxLED = 0;
     }
   }
-  */
+  leds.show();
 
   // Debug using the serial port
   Serial.print("LEFT: ");
