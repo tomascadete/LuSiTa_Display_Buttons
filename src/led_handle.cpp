@@ -3,7 +3,8 @@
   #include <avr/power.h>
 #endif
 
-void setColor(Adafruit_NeoPixel strip, uint32_t color){
+void setColor(Adafruit_NeoPixel strip, uint32_t color)
+{
   for (int i = 0; i < strip.numPixels(); i++) {
     strip.setPixelColor(i, color);  // Define a cor do LED
     strip.show();  // Mostra as alterações nos LEDs
@@ -33,7 +34,7 @@ void theaterChaseRainbow(Adafruit_NeoPixel strip, uint8_t wait, int cycles)
           strip.setPixelColor(i+q, Wheel(strip, ((i+j) % 255)));    //turn every third pixel on
         }
         strip.show();
-        delay(wait);
+        // delay(wait);
 
         for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
           strip.setPixelColor(i+q, 0);        //turn every third pixel off

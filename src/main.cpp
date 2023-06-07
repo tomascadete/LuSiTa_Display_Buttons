@@ -17,7 +17,7 @@
 #define LED_COUNT 115    // Number of LEDs in the strip
 
 // Declare our NeoPixel strip object:
-Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+// Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // Declare our I2C device (display)
 TwoWire CustomI2C0(16, 17); // SDA, SCL
@@ -52,7 +52,7 @@ fsm_t on_off, led_control, menus, brightness, cur_price, previsions, set_colour,
 bool wifi_connected = true, current_price_mode = true, previsions_mode = false, set_colour_mode = false;
 char ssid[32] = "eduroam";
 char password[32] = "password";
-int aux = 1, battery_level = 99, reminder=0, led_brightness = 60, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
+int aux = 1, auxLED = 0, battery_level = 99, reminder=0, led_brightness = 60, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
 int months_31days[7] = {1,3,5,7,8,10,12};
 int months_30days[11] = {1,3,4,5,6,7,8,9,10,11,12};
 int months_all[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
@@ -67,13 +67,13 @@ int colour_index = 0;
 float treshold_1 = 0.40, treshold_2 = 0.75, treshold_3 = 1.10, treshold_4 = 1.50;
 
 // Define the colours to be utilized
-uint32_t GREEN = strip.Color(0, 255, 0);
-uint32_t GREENISH_YELLOW = strip.Color(154, 205, 50);
-uint32_t YELLOW = strip.Color(255, 255, 0);
-uint32_t ORANGE = strip.Color(255, 165, 0);
-uint32_t RED = strip.Color(255, 0, 0);
-uint32_t wHiTe = strip.Color(255, 255, 255); // Easter EGG
-uint32_t BLUE = strip.Color(0, 0, 255);
+// uint32_t GREEN = strip.Color(0, 255, 0);
+// uint32_t GREENISH_YELLOW = strip.Color(154, 205, 50);
+// uint32_t YELLOW = strip.Color(255, 255, 0);
+// uint32_t ORANGE = strip.Color(255, 165, 0);
+// uint32_t RED = strip.Color(255, 0, 0);
+// uint32_t wHiTe = strip.Color(255, 255, 255); // Easter EGG
+// uint32_t BLUE = strip.Color(0, 0, 255);
 
 
 unsigned long interval, last_cycle;
@@ -93,13 +93,14 @@ void set_state(fsm_t& fsm, int new_state)
 void setup()
 {
   Serial.begin(9600);
+
   pinMode(PIN_BUTTON_LEFT, INPUT_PULLUP);
   pinMode(PIN_BUTTON_HOME, INPUT_PULLUP);
   pinMode(PIN_BUTTON_OK, INPUT_PULLUP);
   pinMode(PIN_BUTTON_RIGHT, INPUT_PULLUP);
 
-  strip.begin();
-  strip.show();  // Turns of the LEDs completely
+  // strip.begin();
+  // strip.show();  // Turns of the LEDs completely
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) // 3D
@@ -108,8 +109,8 @@ void setup()
     for(;;); // Don't proceed, loop forever
   }
 
-  strip.setBrightness(led_brightness);
-  ledInit(strip);
+  // strip.setBrightness(led_brightness);
+  // ledInit(strip);
 }
 
 void loop()
@@ -224,6 +225,7 @@ void loop()
   else if (set_treshold.state == 4 && OK && !prevOK)
   {
     set_treshold.new_state = 5; // Confirmation screen
+    auxLED = 1;
   }
   else if (set_treshold.state == 5 && set_treshold.tis > 3000)
   {
@@ -258,6 +260,7 @@ void loop()
     current_price_mode = false;
     set_colour.new_state = 2; // Confirmation screen
     aux = 1;
+    auxLED = 1;
   }
   else if (set_colour.state == 2 && set_colour.tis > 3000)
   {
@@ -405,6 +408,7 @@ void loop()
     current_price_mode = false;
     set_colour_mode = false;
     previsions.new_state = 7; // Confirmation of prevision mode activation
+    auxLED = 1;
   }
   else if (previsions.state == 7 && previsions.tis >= 3000)
   {
@@ -420,6 +424,7 @@ void loop()
     cur_price.new_state = 0;
     menus.new_state = reminder;
     aux = 1;
+    auxLED = 1;
   }
 
 
@@ -429,7 +434,7 @@ void loop()
     if(led_brightness < 240)
     {
       led_brightness += 20;
-      strip.setBrightness(led_brightness);
+      // strip.setBrightness(led_brightness);
     }
     aux = 1;
   }
@@ -438,7 +443,7 @@ void loop()
     if(led_brightness >= 20)
     {
       led_brightness -= 20;
-      strip.setBrightness(led_brightness);
+      // strip.setBrightness(led_brightness);
     }
     aux = 1;
   }
@@ -559,14 +564,17 @@ void loop()
   if(current_price_mode && led_control.state!=1)
   {
     led_control.new_state = 1; // Current price mode
+    auxLED = 1;
   }
   else if(previsions_mode && led_control.state!=2)
   {
     led_control.new_state = 2; // Previsions mode
+    auxLED = 1;
   }
   else if(set_colour_mode && led_control.state!=3)
   {
     led_control.new_state = 3; // Set colour mode
+    auxLED = 1;
   }
   
 
@@ -959,79 +967,97 @@ void loop()
   }
 
   // Actions set by the current state of the led_control state machine
-  if (led_control.state == 1)
+  /*
+  if (led_control.state == 1 && auxLED)
   {
     if(price_current < treshold_1)
     {
       setColor(strip, GREEN);
+      auxLED = 0;
     }
     else if(price_current >= treshold_1 && price_current < treshold_2)
     {
       setColor(strip, GREENISH_YELLOW);
+      auxLED = 0;
     }
     else if(price_current >= treshold_2 && price_current < treshold_3)
     {
       setColor(strip, YELLOW);
+      auxLED = 0;
     }
     else if(price_current >= treshold_3 && price_current < treshold_4)
     {
       setColor(strip, ORANGE);
+      auxLED = 0;
     }
     else if(price_current >= treshold_4)
     {
       setColor(strip, RED);
+      auxLED = 0;
     }
   }
-  else if (led_control.state == 2)
+  else if (led_control.state == 2 && auxLED)
   {
     if(price_prevision < treshold_1)
     {
       setColor(strip, GREEN);
+      auxLED = 0;
     }
     else if(price_prevision >= treshold_1 && price_prevision < treshold_2)
     {
       setColor(strip, GREENISH_YELLOW);
+      auxLED = 0;
     }
     else if(price_prevision >= treshold_2 && price_prevision < treshold_3)
     {
       setColor(strip, YELLOW);
+      auxLED = 0;
     }
     else if(price_prevision >= treshold_3 && price_prevision < treshold_4)
     {
       setColor(strip, ORANGE);
+      auxLED = 0;
     }
     else if(price_prevision >= treshold_4)
     {
       setColor(strip, RED);
+      auxLED = 0;
     }
   }
-  else if (led_control.state == 3)
+  else if (led_control.state == 3 && auxLED)
   {
     if (colour_index == 0) // RED
     {
       setColor(strip, RED);
+      auxLED = 0;
     }
     else if (colour_index == 1) // GREEN
     {
       setColor(strip, GREEN);
+      auxLED = 0;
     }
     else if (colour_index == 2) // BLUE
     {
       setColor(strip, BLUE);
+      auxLED = 0;
     }
     else if (colour_index == 3) // YELLOW
     {
       setColor(strip, YELLOW);
+      auxLED = 0;
     }
     else if (colour_index == 4) // ORANGE
     {
       setColor(strip, ORANGE);
+      auxLED = 0;
     }
     else if (colour_index == 5) // WHITE
     {
       setColor(strip, WHITE);
+      auxLED = 0;
     }
   }
+  */
 
   // Debug using the serial port
   Serial.print("LEFT: ");
