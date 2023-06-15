@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Wire.h>
+#include <String.h>
+#include <stdlib.h>
 #include "Adafruit_GFX.h"
 #include "Adafruit_SSD1306.h"
 #include "Adafruit_I2CDevice.h"
@@ -9,17 +11,14 @@
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 
-#define LEDS_PIN 1        // Data pin for the LED strip
-#define LED_COUNT 115    // Number of LEDs in the strip
+#define LEDS_PIN 2        // Data pin for the LED strip
+#define LED_COUNT 4    // Number of LEDs in the strip
 
 // Declare our NeoPixel strip object:
 Adafruit_NeoPixel leds(LED_COUNT, LEDS_PIN, NEO_GRB + NEO_KHZ800);
 
 // I2C for communication with the display
 TwoWire CustomI2C0(16, 17); // SDA, SCL
-
-// I2C for communication with Raspberry Pi Pico
-TwoWire CustomI2C1(18, 19); // SDA, SCL
 
 // Initialize the SSD1306 display
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &CustomI2C0, -1);
@@ -52,13 +51,18 @@ fsm_t on_off, led_control, menus, brightness, cur_price, previsions, set_colour,
 bool wifi_connected = true, current_price_mode = true, previsions_mode = false, set_colour_mode = false;
 char ssid[32] = "eduroam";
 char password[32] = "password";
-int aux = 1, auxLED = 1, battery_level = 99, reminder=0, led_brightness = 60, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
+char yearstr[5] = "";
+char yearstr1[3] = "";
+char yearstr2[3] = "";
+int aux = 1, auxLED = 1, battery_level = 99, reminder=0, led_brightness = 30, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
 int months_31days[7] = {1,3,5,7,8,10,12};
 int months_30days[11] = {1,3,4,5,6,7,8,9,10,11,12};
 int months_all[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
 float price_current = 1.6, price_prevision = 1.4;
 char colors[N_COLORS][10] = {"red", "green", "blue", "yellow", "orange", "white"};
 int colour_index = 0;
+int received_value = 0;
+int year1 = 0, year2 = 0;
 
 // Treshold_1 is when the light changes from green to greenish yellow
 // Treshold_2 is when the light changes from greenish yellow to yellow
@@ -83,6 +87,7 @@ void set_state(fsm_t& fsm, int new_state)
 void setup()
 {
   Serial.begin(9600);
+  Serial1.begin(9600);
 
   pinMode(PIN_BUTTON_LEFT, INPUT_PULLUP);
   pinMode(PIN_BUTTON_HOME, INPUT_PULLUP);
@@ -97,8 +102,6 @@ void setup()
     Serial.println(F("SSD1306 allocation failed"));
     for(;;); // Don't proceed, loop forever
   }
-
-  CustomI2C1.begin(); // Raspberry Pi Pico I2C
 
   leds.setBrightness(led_brightness);
   leds.show();
@@ -389,9 +392,33 @@ void loop()
     }
     else if (previsions.state == 5 && OK && !prevOK)
     {
-      // TODO: Call the function to get the prevision for the specified date and time
-      // price_prevision = get_price_prevision(day, month, year, hour, minute);
-      previsions.new_state = 6; // Show prevision for selected day
+      // Send values via UART
+      Serial1.flush(); // Clear the buffer
+      Serial1.write(day);
+      Serial1.write(month);
+      itoa(year, yearstr, 10);
+      yearstr1[0]=yearstr[0];
+      yearstr1[1]=yearstr[1];
+      yearstr2[0]=yearstr[2];
+      yearstr2[1]=yearstr[3];
+      year1 = atoi(yearstr1);
+      year2 = atoi(yearstr2);
+      Serial1.write(year1);
+      Serial1.write(year2);
+      Serial1.write(hour);
+      Serial1.write(minute);
+      previsions.new_state = 10; // Wait for feedback from the other Pico
+    }
+    else if (previsions.state == 10)
+    {
+      Serial.println("Receiving price prevision"); // For debugging
+      // Receive 1 float value via UART when available
+      if (Serial1.available() >= sizeof(float))
+      {
+        price_prevision = Serial1.parseFloat();
+        Serial.println(price_prevision); // For debugging
+        previsions.new_state = 6; // Display price prevision on the screen
+      }
     }
     else if (previsions.state == 6 && OK && !prevOK)
     {
@@ -408,7 +435,6 @@ void loop()
       aux = 1;
     }
 
-
     // Calculate next state for the cur_price state machine
     if (cur_price.state == 1 && cur_price.tis >= 3000)
     {
@@ -417,7 +443,6 @@ void loop()
       aux = 1;
       auxLED = 1;
     }
-
 
     // Calculate next state for the brightness state machine
     if(brightness.state == 1 && RIGHT && !prevRIGHT)
@@ -547,6 +572,16 @@ void loop()
     {
       on_off.new_state = 0;
       menus.new_state = 0; // Stops the menus state machine
+      aux = 1;
+    }
+    else if (on_off.state == 1 && HOME && !prevHOME)
+    {
+      menus.new_state = 1; // Stops the menus state machine
+      brightness.new_state = 0; // Stops the brightness state machine
+      cur_price.new_state = 0;
+      previsions.new_state = 0;
+      set_colour.new_state = 0;
+      set_treshold.new_state = 0;
       aux = 1;
     }
 
@@ -848,6 +883,17 @@ void loop()
       display.setCursor(0, 0);
       display.println("Success!!!");
       display.println("Colours will now     represent the trackedprice");
+      display.display();
+      aux = 0;
+    }
+    else if (previsions.state == 10 && aux)
+    {
+      display.clearDisplay();
+      display.setTextColor(WHITE);
+      display.setTextSize(1);
+      display.setFont(NULL);
+      display.setCursor(0, 8);
+      display.println("Retrieving price for the selected day...");
       display.display();
       aux = 0;
     }
