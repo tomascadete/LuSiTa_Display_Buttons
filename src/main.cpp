@@ -12,7 +12,7 @@
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 
 #define LEDS_PIN 2        // Data pin for the LED strip
-#define LED_COUNT 4    // Number of LEDs in the strip
+#define LED_COUNT 86    // Number of LEDs in the strip
 
 // Declare our NeoPixel strip object:
 Adafruit_NeoPixel leds(LED_COUNT, LEDS_PIN, NEO_GRB + NEO_KHZ800);
@@ -27,6 +27,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &CustomI2C0, -1);
 #define PIN_BUTTON_HOME 13
 #define PIN_BUTTON_OK 14
 #define PIN_BUTTON_RIGHT 15
+#define PIN_BUTTON_SWITCH 20
+#define PIN_BUTTON_ONOFF 21
 
 #define N_COLORS 6
 
@@ -43,22 +45,21 @@ uint8_t LEFT, prevLEFT;
 uint8_t HOME, prevHOME;
 uint8_t OK, prevOK;
 uint8_t RIGHT, prevRIGHT;
-uint8_t SWITCH, prevSWITCH;
 
 // Our finite state machine
 fsm_t on_off, led_control, menus, brightness, cur_price, previsions, set_colour, set_treshold;
 
-bool wifi_connected = true, current_price_mode = true, previsions_mode = false, set_colour_mode = false;
+bool wifi_connected = true, current_price_mode = true, previsions_mode = false, set_colour_mode = false, saving = false;
 char ssid[32] = "eduroam";
 char password[32] = "password";
 char yearstr[5] = "";
 char yearstr1[3] = "";
 char yearstr2[3] = "";
-int aux = 1, auxLED = 1, battery_level = 99, reminder=0, led_brightness = 30, day = 1, month = 1, year = 2023, hour = 17, minute = 00, j;
+int aux = 1, auxLED = 1, battery_level = 99, reminder=0, led_brightness = 30, day = 16, month = 1, year = 2023, hour = 9, minute = 00, j;
 int months_31days[7] = {1,3,5,7,8,10,12};
 int months_30days[11] = {1,3,4,5,6,7,8,9,10,11,12};
 int months_all[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
-float price_current = 1.6, price_prevision = 1.4;
+float price_current = 0.13, price_prevision = 0.05;
 char colors[N_COLORS][10] = {"red", "green", "blue", "yellow", "orange", "white"};
 int colour_index = 0;
 int received_value = 0;
@@ -68,7 +69,7 @@ int year1 = 0, year2 = 0;
 // Treshold_2 is when the light changes from greenish yellow to yellow
 // Treshold_3 is when the light changes from yellow to orange
 // Treshold_4 is when the light changes from orange to red
-float treshold_1 = 0.40, treshold_2 = 0.75, treshold_3 = 1.10, treshold_4 = 1.50;
+float treshold_1 = 0.06, treshold_2 = 0.09, treshold_3 = 0.12, treshold_4 = 0.16;
 
 unsigned long interval, last_cycle;
 unsigned long loop_micros;
@@ -93,6 +94,9 @@ void setup()
   pinMode(PIN_BUTTON_HOME, INPUT_PULLUP);
   pinMode(PIN_BUTTON_OK, INPUT_PULLUP);
   pinMode(PIN_BUTTON_RIGHT, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_ONOFF, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_SWITCH, OUTPUT);
+  digitalWrite(PIN_BUTTON_SWITCH, LOW);
 
   leds.begin();  // Call this to start up the LED strip.
 
@@ -141,6 +145,18 @@ void loop()
     previsions.tis = cur_time - previsions.tes;
     set_colour.tis = cur_time - set_colour.tes;
     set_treshold.tis = cur_time - set_treshold.tes;
+
+    if (Serial1.available() >= sizeof(float))
+    {
+      price_current = Serial1.readStringUntil('\n').toFloat();
+      Serial.println(price_current); // For debugging
+      aux = 1;
+      auxLED = 1;
+    }
+    else if (Serial1.available())
+    {
+      Serial1.flush();
+    }
 
     // Calculate next state for the set_treshold state machine
     if (set_treshold.state == 1 && RIGHT && !prevRIGHT) // treshold 1 selection
@@ -227,7 +243,6 @@ void loop()
       menus.new_state = reminder;
       aux = 1;
     }
-    
 
 
     // Calculate next state for the set_colour state machine (red, green, blue, yellow, orange, white)
@@ -393,7 +408,6 @@ void loop()
     else if (previsions.state == 5 && OK && !prevOK)
     {
       // Send values via UART
-      Serial1.flush(); // Clear the buffer
       Serial1.write(day);
       Serial1.write(month);
       itoa(year, yearstr, 10);
@@ -411,14 +425,8 @@ void loop()
     }
     else if (previsions.state == 10)
     {
-      Serial.println("Receiving price prevision"); // For debugging
-      // Receive 1 float value via UART when available
-      if (Serial1.available() >= sizeof(float))
-      {
-        price_prevision = Serial1.parseFloat();
-        Serial.println(price_prevision); // For debugging
-        previsions.new_state = 6; // Display price prevision on the screen
-      }
+      price_prevision = Serial1.readStringUntil('\n').toFloat();
+      previsions.new_state = 6; // Display price prevision on the screen
     }
     else if (previsions.state == 6 && OK && !prevOK)
     {
@@ -567,11 +575,13 @@ void loop()
     {
       on_off.new_state = 1;
       menus.new_state = 1;  // Starts the menus state machine
+      digitalWrite(PIN_BUTTON_SWITCH, HIGH); // Turns on the LEDs
     }
     else if (on_off.state == 1 && LEFT && RIGHT) // Turn off if LEFT and RIGHT are pressed simultaneously
     {
       on_off.new_state = 0;
       menus.new_state = 0; // Stops the menus state machine
+      digitalWrite(PIN_BUTTON_SWITCH, LOW); // Turns off the LEDs
       aux = 1;
     }
     else if (on_off.state == 1 && HOME && !prevHOME)
@@ -1141,44 +1151,45 @@ void loop()
         auxLED = 0;
       }
     }
+    leds.setBrightness(led_brightness);
     leds.show();
 
     // Debug using the serial port
-    Serial.print("LEFT: ");
-    Serial.print(LEFT);
+    // Serial.print("LEFT: ");
+    // Serial.print(LEFT);
 
-    Serial.print(" RIGHT: ");
-    Serial.print(RIGHT);
+    // Serial.print(" RIGHT: ");
+    // Serial.print(RIGHT);
 
-    Serial.print(" HOME: ");
-    Serial.print(HOME);
+    // Serial.print(" HOME: ");
+    // Serial.print(HOME);
 
-    Serial.print(" OK: ");
-    Serial.print(OK);
+    // Serial.print(" OK: ");
+    // Serial.print(OK);
 
-    Serial.print(" led_control.state: ");
-    Serial.print(led_control.state);
+    // Serial.print(" led_control.state: ");
+    // Serial.print(led_control.state);
 
-    Serial.print(" on_off.state: ");
-    Serial.print(on_off.state);
+    // Serial.print(" on_off.state: ");
+    // Serial.print(on_off.state);
 
-    Serial.print(" menus.state: ");
-    Serial.print(menus.state);
+    // Serial.print(" menus.state: ");
+    // Serial.print(menus.state);
 
-    Serial.print(" brightness.state: ");
-    Serial.print(brightness.state);
+    // Serial.print(" brightness.state: ");
+    // Serial.print(brightness.state);
 
-    Serial.print(" cur_price.state: ");
-    Serial.print(cur_price.state);
+    // Serial.print(" cur_price.state: ");
+    // Serial.print(cur_price.state);
 
-    Serial.print(" previsions.state: ");
-    Serial.print(previsions.state);
+    // Serial.print(" previsions.state: ");
+    // Serial.print(previsions.state);
 
-    Serial.print(" set_colour.state: ");
-    Serial.print(set_colour.state);
+    // Serial.print(" set_colour.state: ");
+    // Serial.print(set_colour.state);
 
-    Serial.print(" set_treshold.state: ");
-    Serial.print(set_treshold.state);
+    // Serial.print(" set_treshold.state: ");
+    // Serial.print(set_treshold.state);
 
     Serial.print(" loop: ");
     Serial.println(micros() - loop_micros);
