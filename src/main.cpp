@@ -146,16 +146,13 @@ void loop()
     set_colour.tis = cur_time - set_colour.tes;
     set_treshold.tis = cur_time - set_treshold.tes;
 
-    if (Serial1.available() >= sizeof(float))
+    if (Serial1.available())
     {
-      price_current = Serial1.readStringUntil('\n').toFloat();
+      price_current = Serial1.readStringUntil('f').toFloat();
       Serial.println(price_current); // For debugging
       aux = 1;
       auxLED = 1;
-    }
-    else if (Serial1.available())
-    {
-      Serial1.flush();
+      
     }
 
     // Calculate next state for the set_treshold state machine
@@ -425,7 +422,7 @@ void loop()
     }
     else if (previsions.state == 10)
     {
-      price_prevision = Serial1.readStringUntil('\n').toFloat();
+      price_prevision = Serial1.readStringUntil('f').toFloat();
       previsions.new_state = 6; // Display price prevision on the screen
     }
     else if (previsions.state == 6 && OK && !prevOK)
@@ -729,7 +726,7 @@ void loop()
         display.setCursor(0, 9);
         display.println("Connected to Wi-Fi!");
         display.print("SSID: ");
-        display.println(ssid);
+        display.println("Teste");
         display.display();
         aux = 0;
       }
@@ -1036,7 +1033,7 @@ void loop()
       {
         for(int i = 0; i < LED_COUNT; i++)
         {
-          leds.setPixelColor(i, leds.Color(255, 255, 0));
+          leds.setPixelColor(i, leds.Color(255, 220, 0));
         }
         auxLED = 0;
       }
@@ -1044,7 +1041,7 @@ void loop()
       {
         for(int i = 0; i < LED_COUNT; i++)
         {
-          leds.setPixelColor(i, leds.Color(255, 165, 0));
+          leds.setPixelColor(i, leds.Color(255, 140, 0));
         }
         auxLED = 0;
       }
@@ -1079,7 +1076,7 @@ void loop()
       {
         for(int i = 0; i < LED_COUNT; i++)
         {
-          leds.setPixelColor(i, leds.Color(255, 255, 0));
+          leds.setPixelColor(i, leds.Color(255, 220, 0));
         }
         auxLED = 0;
       }
@@ -1087,7 +1084,7 @@ void loop()
       {
         for(int i = 0; i < LED_COUNT; i++)
         {
-          leds.setPixelColor(i, leds.Color(255, 165, 0));
+          leds.setPixelColor(i, leds.Color(255, 140, 0));
         }
         auxLED = 0;
       }
@@ -1130,7 +1127,7 @@ void loop()
       {
         for(int i = 0; i < LED_COUNT; i++)
         {
-          leds.setPixelColor(i, leds.Color(255, 255, 0));
+          leds.setPixelColor(i, leds.Color(255, 220, 0));
         }
         auxLED = 0;
       }
@@ -1138,7 +1135,7 @@ void loop()
       {
         for(int i = 0; i < LED_COUNT; i++)
         {
-          leds.setPixelColor(i, leds.Color(255, 165, 0));
+          leds.setPixelColor(i, leds.Color(255, 140, 0));
         }
         auxLED = 0;
       }
@@ -1191,8 +1188,8 @@ void loop()
     // Serial.print(" set_treshold.state: ");
     // Serial.print(set_treshold.state);
 
-    Serial.print(" loop: ");
-    Serial.println(micros() - loop_micros);
+    // Serial.print(" loop: ");
+    // Serial.println(micros() - loop_micros);
 
   }
 }
